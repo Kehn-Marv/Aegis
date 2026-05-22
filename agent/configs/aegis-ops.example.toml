@@ -1,0 +1,66 @@
+# AegisOps Agent configuration.
+# Copy to `aegis-ops.toml` and fill in secrets before running.
+
+[agent]
+# How often the observe -> reason -> act loop fires, per gateway.
+loop_interval_secs = 15
+# When true, the actuator never calls any gateway or HEC. Use for prompt
+# iteration without producing audit noise.
+dry_run = false
+
+[policy]
+# One of: "read_only", "low_risk_auto", "full_auto".
+#   read_only      - agent only observes and recommends, never actuates
+#   low_risk_auto  - auto-execute `diagnostic`, recommend `override`/`reset`
+#   full_auto      - auto-execute every decision the model returns
+mode = "low_risk_auto"
+# Confidence floor below which a decision is downgraded to a recommendation.
+min_confidence = 0.6
+# Per-tool cooldown - the same tool can fire at most once per N seconds per gateway.
+cooldown_secs = 120
+
+[splunk]
+# Splunk Cloud URL, no trailing slash, no /services/... suffix.
+url = "https://prd-p-XXXXX.splunkcloud.com"
+# Splunk auth token (NOT HEC). Generated at
+# Settings -> Tokens -> New Token. Needs `search` capability plus
+# `apply_ai_commander_command` (mltk_admin role).
+token = "PASTE-SPLUNK-AUTH-TOKEN-HERE"
+verify_tls = true
+# Default SPL time window for observational searches.
+earliest = "-5m"
+latest = "now"
+
+[hosted_model]
+# Provider name as configured in AI Toolkit -> Connection Management.
+# Use the exact label shown in your AITK UI; "splunk_hosted" is the
+# typical name for the Splunk Hosted (SLIM API) provider.
+provider = "splunk_hosted"
+# Model identifier. One of:
+#   gpt-oss-20b              (fast, cheap, recommended for triage)
+#   gpt-oss-120b             (better reasoning, slower)
+#   foundation-sec-1.1-8b-instruct
+model = "gpt-oss-20b"
+# Per-call timeout for the search-based inference.
+timeout_secs = 30
+
+[audit]
+# HEC endpoint the agent ships decision records to.
+# Same HEC the Aegis gateways use is fine.
+hec_endpoint = "https://localhost:8088/services/collector/event"
+hec_token    = "PASTE-HEC-TOKEN-HERE"
+hec_index    = "aegis"
+hec_source   = "aegis:agent"
+hec_sourcetype = "aegis:agent"
+verify_tls   = false
+
+# One [[gateways]] block per Aegis edge to monitor.
+# The demo defaults are 7321 and 7322 representing two regions on this host.
+
+[[gateways]]
+name = "us-east"
+url  = "http://127.0.0.1:7321"
+
+[[gateways]]
+name = "eu-west"
+url  = "http://127.0.0.1:7322"

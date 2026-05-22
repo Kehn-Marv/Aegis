@@ -1,0 +1,56 @@
+# Aegis edge gateway configuration.
+# Copy to `aegis.toml` and fill in the secrets before running.
+
+[hec]
+endpoint    = "https://localhost:8088/services/collector/event"
+token       = "PUT-YOUR-HEC-TOKEN-HERE"
+index       = "aegis"
+host        = "aegis-edge-01"
+timeout_secs = 10
+verify_tls  = false
+
+[ingest]
+# Listen for raw logs on these sockets.
+tcp_listen = "0.0.0.0:5140"
+udp_listen = "0.0.0.0:5141"
+# Optional list of files to tail.
+tail_files = []
+
+[dedup]
+# How long to keep a signature open for collapsing before flushing its metric.
+window_secs = 60
+# Maximum number of open signatures before forcing the oldest to flush.
+max_open_signatures = 4096
+
+[summary]
+# When true, `Collapsed` events whose AI classification is `routine` are
+# suppressed and rolled into periodic `Summary` events under
+# sourcetype=aegis:summary. Requires the [sidecar] block to be enabled
+# so classifications are available.
+enabled     = false
+batch_size  = 500
+flush_secs  = 30
+
+[queue]
+# Path to the SQLite buffer used for offline / priority queueing.
+path                = "data/aegis-queue.sqlite"
+max_disk_bytes      = 1073741824   # 1 GiB
+priority_anomaly_first = true
+
+[sidecar]
+# URL of the Python AI sidecar (embeddings, clustering, hosted-model adapter).
+url        = "http://127.0.0.1:8765"
+# Set to false to bypass the sidecar entirely (hash-only dedup).
+enabled    = true
+
+[self_metrics]
+# Dedicated source for Aegis's own performance telemetry.
+source      = "aegis:self"
+sourcetype  = "aegis:selfmetric"
+flush_secs  = 15
+
+[mcp]
+# Streamable-HTTP MCP endpoint that external AI agents (Cursor, Claude
+# Desktop, custom orchestrators) connect to. The MCP path is
+# `http://{http_listen}/mcp`. Leave blank/omit to disable HTTP MCP.
+http_listen = "127.0.0.1:7321"

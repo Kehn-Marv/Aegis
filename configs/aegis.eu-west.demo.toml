@@ -1,0 +1,19 @@
+# Multi-edge demo: EU-West region gateway.
+# Pair with configs/aegis.us-east.demo.toml for the AegisOps multi-edge demo.
+# No [hec] -> stderr sink (no Splunk required).
+
+[ingest]
+tcp_listen = "127.0.0.1:5142"
+
+[dedup]
+window_secs         = 3
+max_open_signatures = 4096
+
+[queue]
+path = "data/eu-west-queue.sqlite"
+
+[mcp]
+http_listen = "127.0.0.1:7322"
+
+[sidecar]
+enabled = false

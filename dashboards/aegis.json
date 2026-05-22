@@ -1,0 +1,175 @@
+{
+  "title": "Aegis — Edge Telemetry Gateway",
+  "description": "FinOps + AI dashboard for the Aegis edge gateway. Tracks dedup savings, queue health, and the AI classifier's verdict on suppressed signatures.",
+  "visualizations": {
+    "viz_headline_dedup": {
+      "type": "splunk.singlevalue",
+      "title": "Dedup Savings",
+      "options": {
+        "majorValue": "> primary | seriesByName(\"dedup_savings_pct\") | lastPoint()",
+        "unit": "%",
+        "majorColor": "#3DDC97",
+        "backgroundColor": "#0B1228",
+        "trendDisplay": "off"
+      },
+      "dataSources": { "primary": "ds_status_latest" }
+    },
+    "viz_headline_events_in": {
+      "type": "splunk.singlevalue",
+      "title": "Lines Ingested",
+      "options": {
+        "majorValue": "> primary | seriesByName(\"events_in\") | lastPoint()",
+        "unit": "lines",
+        "majorColor": "#7C5CFF",
+        "backgroundColor": "#0B1228"
+      },
+      "dataSources": { "primary": "ds_status_latest" }
+    },
+    "viz_headline_events_out": {
+      "type": "splunk.singlevalue",
+      "title": "Events Forwarded",
+      "options": {
+        "majorValue": "> primary | seriesByName(\"events_out\") | lastPoint()",
+        "unit": "events",
+        "majorColor": "#7C5CFF",
+        "backgroundColor": "#0B1228"
+      },
+      "dataSources": { "primary": "ds_status_latest" }
+    },
+    "viz_queue_depth": {
+      "type": "splunk.singlevalue",
+      "title": "Queue Depth",
+      "options": {
+        "majorValue": "> primary | seriesByName(\"queue_depth\") | lastPoint()",
+        "unit": "events",
+        "majorColor": "#F59E0B",
+        "backgroundColor": "#0B1228"
+      },
+      "dataSources": { "primary": "ds_status_latest" }
+    },
+    "viz_events_over_time": {
+      "type": "splunk.line",
+      "title": "Ingest vs Forwarded — last 1h",
+      "description": "events_in is what apps sent us; events_out is what we sent to Splunk after dedup + summarization.",
+      "options": {
+        "yAxisTitleText": "events",
+        "showRoundedY2AxisLabels": false,
+        "legendDisplay": "right"
+      },
+      "dataSources": { "primary": "ds_events_timechart" }
+    },
+    "viz_top_signatures": {
+      "type": "splunk.table",
+      "title": "Top suppressed signatures",
+      "description": "The signatures that contributed the most savings. `suppressed_count` is total raw lines collapsed into one metric event per window.",
+      "dataSources": { "primary": "ds_top_signatures" }
+    },
+    "viz_classification": {
+      "type": "splunk.pie",
+      "title": "AI classifier verdict",
+      "description": "Breakdown of suppressed events by the sidecar's classification.",
+      "options": {
+        "showDonutHole": true,
+        "showLegend": true
+      },
+      "dataSources": { "primary": "ds_classification" }
+    },
+    "viz_strategy_breakdown": {
+      "type": "splunk.bar",
+      "title": "Classifier strategy used",
+      "description": "Which path the classifier actually took. Hosted-model is highest fidelity; embedding-distance is the default local path; keyword is the last-resort fallback.",
+      "dataSources": { "primary": "ds_classifier_strategy" }
+    },
+    "viz_first_occurrences": {
+      "type": "splunk.column",
+      "title": "First-occurrence events — last 1h",
+      "description": "How many *new* signatures the gateway saw over time. Spikes here usually mean a deploy or an incident.",
+      "dataSources": { "primary": "ds_first_occurrences" }
+    }
+  },
+  "dataSources": {
+    "ds_status_latest": {
+      "type": "ds.search",
+      "options": {
+        "query": "index=aegis sourcetype=aegis:selfmetric | head 1 | table events_in events_out dedup_savings_pct queue_depth online unique_signatures",
+        "queryParameters": { "earliest": "-15m", "latest": "now" }
+      },
+      "name": "Latest gateway status"
+    },
+    "ds_events_timechart": {
+      "type": "ds.search",
+      "options": {
+        "query": "index=aegis sourcetype=aegis:selfmetric | timechart span=1m latest(events_in) AS in latest(events_out) AS out",
+        "queryParameters": { "earliest": "-1h", "latest": "now" }
+      },
+      "name": "Events timechart"
+    },
+    "ds_top_signatures": {
+      "type": "ds.search",
+      "options": {
+        "query": "index=aegis sourcetype=aegis:metric | stats sum(count) AS suppressed_count avg(window_secs) AS avg_window_secs values(sample) AS sample by signature | sort - suppressed_count | head 10",
+        "queryParameters": { "earliest": "-1h", "latest": "now" }
+      },
+      "name": "Top suppressed signatures"
+    },
+    "ds_classification": {
+      "type": "ds.search",
+      "options": {
+        "query": "index=aegis sourcetype=aegis:metric \"classification.label\"=* | stats sum(count) AS suppressed_lines by classification.label",
+        "queryParameters": { "earliest": "-1h", "latest": "now" }
+      },
+      "name": "Classification breakdown"
+    },
+    "ds_classifier_strategy": {
+      "type": "ds.search",
+      "options": {
+        "query": "index=aegis sourcetype=aegis:metric \"classification.strategy\"=* | stats count by classification.strategy",
+        "queryParameters": { "earliest": "-1h", "latest": "now" }
+      },
+      "name": "Classifier strategy breakdown"
+    },
+    "ds_first_occurrences": {
+      "type": "ds.search",
+      "options": {
+        "query": "index=aegis sourcetype=aegis:raw kind=first_occurrence | timechart span=5m count AS new_signatures",
+        "queryParameters": { "earliest": "-1h", "latest": "now" }
+      },
+      "name": "First-occurrence rate"
+    }
+  },
+  "defaults": {
+    "dataSources": {
+      "ds.search": {
+        "options": { "queryParameters": { "earliest": "-1h", "latest": "now" } }
+      }
+    }
+  },
+  "inputs": {
+    "input_time": {
+      "type": "input.timerange",
+      "options": { "token": "global_time" },
+      "title": "Time range"
+    }
+  },
+  "layout": {
+    "type": "absolute",
+    "options": {
+      "width": 1440,
+      "height": 920,
+      "display": "auto-scale",
+      "backgroundColor": "#050816"
+    },
+    "structure": [
+      { "item": "viz_headline_dedup",     "type": "block", "position": { "x":   0, "y":   0, "w": 360, "h": 160 } },
+      { "item": "viz_headline_events_in", "type": "block", "position": { "x": 360, "y":   0, "w": 360, "h": 160 } },
+      { "item": "viz_headline_events_out","type": "block", "position": { "x": 720, "y":   0, "w": 360, "h": 160 } },
+      { "item": "viz_queue_depth",        "type": "block", "position": { "x":1080, "y":   0, "w": 360, "h": 160 } },
+      { "item": "viz_events_over_time",   "type": "block", "position": { "x":   0, "y": 170, "w": 960, "h": 320 } },
+      { "item": "viz_classification",     "type": "block", "position": { "x": 960, "y": 170, "w": 480, "h": 320 } },
+      { "item": "viz_top_signatures",     "type": "block", "position": { "x":   0, "y": 500, "w": 960, "h": 400 } },
+      { "item": "viz_strategy_breakdown", "type": "block", "position": { "x": 960, "y": 500, "w": 480, "h": 195 } },
+      { "item": "viz_first_occurrences",  "type": "block", "position": { "x": 960, "y": 705, "w": 480, "h": 195 } }
+    ],
+    "globalInputs": ["input_time"]
+  }
+}

@@ -1,0 +1,51 @@
+# Rust
+/target/
+**/*.rs.bk
+Cargo.lock
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+.uv/
+dist/
+build/
+
+# Node / UI
+node_modules/
+.next/
+.turbo/
+out/
+
+# Secrets / local config
+.env
+.env.*
+!.env.example
+configs/aegis.toml
+configs/*.local.*
+agent/configs/aegis-ops.toml
+configs/aegis-us-east.toml
+configs/aegis-eu-west.toml
+
+# Splunk
+*.splunk
+*.tgz
+*.spl
+
+# IDE / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Logs / runtime data
+*.log
+*.sqlite
+*.sqlite-journal
+data/
+
+# Pitch / submission scratch (keep local, don't commit)
+PITCH.md
+SUBMISSION.md
+docs/demo-script.md

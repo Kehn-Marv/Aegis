@@ -1,0 +1,19 @@
+[package]
+name = "aegis-mcp"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+description = "Aegis MCP server: exposes edge control tools (reset/status/diagnostic/override/replay_raw) over MCP."
+
+[dependencies]
+aegis-core.workspace = true
+anyhow.workspace = true
+tokio.workspace = true
+tracing.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+rmcp.workspace = true
+schemars.workspace = true
+axum.workspace = true
+tower-http.workspace = true

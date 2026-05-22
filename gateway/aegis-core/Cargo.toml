@@ -1,0 +1,22 @@
+[package]
+name = "aegis-core"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+description = "Aegis edge gateway core: ingest, semantic dedup, summarization, priority queue, HEC client."
+
+[dependencies]
+anyhow.workspace = true
+thiserror.workspace = true
+tokio.workspace = true
+tracing.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+toml.workspace = true
+reqwest.workspace = true
+blake3.workspace = true
+regex.workspace = true
+once_cell.workspace = true
+async-trait.workspace = true
+rusqlite.workspace = true

@@ -1,0 +1,32 @@
+# Multi-edge live template: US-East.
+# Copy to configs/aegis-us-east.toml and fill in HEC token.
+# Set [hec].host = "us-east" so Splunk queries can filter by region.
+
+[hec]
+endpoint    = "https://localhost:8088/services/collector/event"
+token       = "PUT-YOUR-HEC-TOKEN-HERE"
+index       = "aegis"
+host        = "us-east"
+timeout_secs = 10
+verify_tls  = false
+
+[ingest]
+tcp_listen = "127.0.0.1:5140"
+udp_listen = "127.0.0.1:5141"
+
+[dedup]
+window_secs = 60
+max_open_signatures = 4096
+
+[queue]
+path = "data/us-east-queue.sqlite"
+
+[sidecar]
+url     = "http://127.0.0.1:8765"
+enabled = true
+
+[mcp]
+http_listen = "127.0.0.1:7321"
+
+[summary]
+enabled = true

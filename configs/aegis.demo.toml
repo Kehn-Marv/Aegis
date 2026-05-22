@@ -1,0 +1,17 @@
+# Demo config used for the in-terminal walkthrough.
+# Short dedup window so window-close events are visible in seconds.
+# No [hec] section -> daemon falls back to the stderr sink so you can SEE
+# every event the gateway would have sent to Splunk.
+
+[ingest]
+tcp_listen = "127.0.0.1:5140"
+
+[dedup]
+window_secs         = 3
+max_open_signatures = 4096
+
+[mcp]
+http_listen = "127.0.0.1:7321"
+
+[sidecar]
+enabled = false

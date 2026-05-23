@@ -28,12 +28,12 @@ autonomous AegisOps agent that itself uses
 
 | Pillar | What it is | Where |
 |---|---|---|
-| 🛡️ **Edge gateway** | Rust daemon that hashes structural signatures, collapses repeat lines into metric events, buffers offline with anomaly-first drain | `gateway/`, [`docs/finops-math.md`](docs/finops-math.md) |
-| 🧠 **Aegis AI Splunk App** | Splunkbase-shaped app with **Custom Alert Action** + `\| aegisreason` **Custom Search Command**, both running `splunklib.ai.Agent`. 0 AppInspect failures. | [`apps/aegis_ai/`](apps/aegis_ai/) |
-| 🔮 **CDTSM forecast loop** | Dashboard panels + AegisOps prompt-hint loop using Splunk-Hosted CDTSM to predict `queue_depth` and `dedup_savings_pct` 15 min ahead | [`docs/cdtsm-forecast.md`](docs/cdtsm-forecast.md) |
-| 🔌 **MCP both ways** | Aegis hosts its own MCP server (`aegis-mcp`, 5 tools); AegisOps Agent is a real MCP client of `splunk_run_query` via JSON-RPC | [`docs/mcp.md`](docs/mcp.md) |
-| 🤖 **AegisOps Agent** | Autonomous Python agent (observe → reason → act) with three live LLM transports: raw Ollama, AITK-routed Ollama, true Splunk Hosted Models | [`agent/README.md`](agent/README.md) |
-| 📊 **Dashboard Studio** | 11-panel dashboard with the two new CDTSM forecast lines | [`dashboards/aegis.json`](dashboards/aegis.json) |
+|  **Edge gateway** | Rust daemon that hashes structural signatures, collapses repeat lines into metric events, buffers offline with anomaly-first drain | `gateway/`, [`docs/finops-math.md`](docs/finops-math.md) |
+|  **Aegis AI Splunk App** | Splunkbase-shaped app with **Custom Alert Action** + `\| aegisreason` **Custom Search Command**, both running `splunklib.ai.Agent`. 0 AppInspect failures. | [`apps/aegis_ai/`](apps/aegis_ai/) |
+|  **CDTSM forecast loop** | Dashboard panels + AegisOps prompt-hint loop using Splunk-Hosted CDTSM to predict `queue_depth` and `dedup_savings_pct` 15 min ahead | [`docs/cdtsm-forecast.md`](docs/cdtsm-forecast.md) |
+|  **MCP both ways** | Aegis hosts its own MCP server (`aegis-mcp`, 5 tools); AegisOps Agent is a real MCP client of `splunk_run_query` via JSON-RPC | [`docs/mcp.md`](docs/mcp.md) |
+|  **AegisOps Agent** | Autonomous Python agent (observe → reason → act) with three live LLM transports: raw Ollama, AITK-routed Ollama, true Splunk Hosted Models | [`agent/README.md`](agent/README.md) |
+|  **Dashboard Studio** | 11-panel dashboard with the two new CDTSM forecast lines | [`dashboards/aegis.json`](dashboards/aegis.json) |
 
 **Where to look first:**
 

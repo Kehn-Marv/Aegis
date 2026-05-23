@@ -22,16 +22,36 @@ import logging
 
 import httpx
 
+from .splunk_mcp_client import SplunkMcpClient
+
 log = logging.getLogger("aegis_ops.splunk")
 
 
 class SplunkClient:
+    """REST + MCP wrapper for Splunk.
+
+    When an `SplunkMcpClient` is passed in, **all observational SPL
+    queries** go through MCP `tools/call` against the official Splunk
+    MCP Server instead of the raw `/services/search/jobs/oneshot` REST
+    endpoint. The HEC audit path is unaffected (HEC is not part of the
+    MCP surface; it stays REST).
+
+    The dual surface means:
+
+    * Operators can demo Aegis with raw REST today (zero MCP setup).
+    * Once `[splunk.mcp].enabled = true` and the Splunk MCP Server app
+      is installed, the *same* agent loop becomes an MCP client of
+      `splunk_run_query` -- everything visible in `index=_internal
+      sourcetype=mcpjson "tools/call"` for audit.
+    """
+
     def __init__(
         self,
         url: str,
         token: str,
         verify_tls: bool = True,
         timeout: float = 30.0,
+        mcp: SplunkMcpClient | None = None,
     ):
         self.url = url.rstrip("/")
         self._client = httpx.AsyncClient(
@@ -39,16 +59,38 @@ class SplunkClient:
             timeout=timeout,
             headers={"Authorization": f"Bearer {token}"},
         )
+        self.mcp = mcp
 
     async def close(self) -> None:
         await self._client.aclose()
+        if self.mcp is not None:
+            await self.mcp.close()
+
+    @property
+    def transport_label(self) -> str:
+        return "mcp" if self.mcp is not None else "rest"
 
     # ------------------------------------------------------------------
     # Observational SPL
     # ------------------------------------------------------------------
 
     async def oneshot(self, spl: str, earliest: str = "-5m", latest: str = "now") -> list[dict]:
-        """Run an SPL search and return the parsed result rows."""
+        """Run an SPL search and return the parsed result rows.
+
+        Routes via MCP `tools/call` when an `SplunkMcpClient` is wired
+        in; otherwise falls back to `/services/search/jobs/oneshot`.
+        """
+        if self.mcp is not None:
+            try:
+                return await self.mcp.search(spl, earliest=earliest, latest=latest)
+            except Exception as exc:
+                log.warning(
+                    "MCP search failed (%s); falling back to REST oneshot.",
+                    exc,
+                )
+                # Fall through to REST so a misconfigured MCP server
+                # can't take the agent loop down.
+
         data = {
             "search": spl if spl.strip().startswith("search") or spl.strip().startswith("|") else f"search {spl}",
             "output_mode": "json",

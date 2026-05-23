@@ -62,12 +62,12 @@ point the sidecar at it:
 
 ```powershell
 # 1. Install Ollama from https://ollama.com/download then:
-ollama pull qwen2.5:3b      # 1.9 GB on disk, ~3 GB RAM at runtime
-# Lower-spec alternative: ollama pull gemma2:2b   (~2 GB RAM)
+ollama pull gpt-oss:20b     # ~13 GB on disk, ~16 GB RAM (matches Splunk Hosted Models name)
+# Lower-spec alternatives: ollama pull qwen2.5:3b (~3 GB RAM) or ollama pull gemma2:2b (~2 GB RAM)
 
 # 2. Point the sidecar at it (PowerShell):
 $env:AEGIS_HOSTED_MODEL_URL  = "http://127.0.0.1:11434/v1/chat/completions"
-$env:AEGIS_HOSTED_MODEL_NAME = "qwen2.5:3b"
+$env:AEGIS_HOSTED_MODEL_NAME = "gpt-oss:20b"
 uv run aegis-sidecar
 ```
 
@@ -76,7 +76,7 @@ Verify:
 ```powershell
 curl.exe http://127.0.0.1:8765/info
 # hosted_model_transport: "openai_compat"
-# hosted_model_name:      "qwen2.5:3b"
+# hosted_model_name:      "gpt-oss:20b"
 ```
 
 The Aegis gateway will now annotate every collapsed event with a real

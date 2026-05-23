@@ -52,6 +52,23 @@ class Trends(BaseModel):
     trajectory: TrajectoryLabel = "stable"
 
 
+class CdtsmForecast(BaseModel):
+    """Summary of a Splunk-Hosted CDTSM forecast for one metric.
+
+    Populated by the observer when `[observe] cdtsm_enabled = true` and a
+    Splunk client is available. Fed into the reasoner prompt so the LLM
+    can act on a prediction, not just on the current state.
+    """
+
+    metric: str
+    horizon_minutes: int
+    peak_predicted: float
+    minutes_to_peak: int
+    threshold: float
+    breached: bool
+    confidence_band_pct: int = 90
+
+
 class Observation(BaseModel):
     """Everything the reasoner needs to know about one gateway at one tick."""
 
@@ -63,6 +80,7 @@ class Observation(BaseModel):
     routine_count_5m: int = 0
     unknown_count_5m: int = 0
     trends: Trends = Field(default_factory=Trends)
+    forecasts: list[CdtsmForecast] = Field(default_factory=list)
     notes: list[str] = Field(default_factory=list)
 
 

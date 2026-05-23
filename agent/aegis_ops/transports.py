@@ -5,17 +5,20 @@ support two transports today, both behind the same `LLMTransport`
 protocol so the reasoner doesn't care which one is active:
 
 * **OllamaTransport** — POSTs `/api/chat` on a local Ollama server.
-  Zero Splunk credentials. Default model is `qwen2.5:3b` (1.9 GB on
+  Zero Splunk credentials. Default model is `gpt-oss:20b` (matches the
+  Splunk Hosted Models identifier; ~13 GB on disk, ~16 GB RAM). For
+  smaller machines, downshift in `aegis-ops.toml` to `qwen2.5:3b` (1.9 GB on
   disk, ~3 GB RAM, explicitly tuned by Alibaba for structured JSON
   output). When the transport is constructed with a `format_schema`,
   it uses Ollama's hard JSON-schema enforcement so even small 3B
   models reliably emit valid `Decision` objects.
-* **SplunkAITransport** — runs SPL `| ai prompt=... provider=splunk_hosted
-  model=gpt-oss-20b` via `/services/search/jobs/oneshot`. The original
-  hackathon target; currently **hibernated** because the 14-day Splunk
-  Cloud trial does not provision the SLIM API
-  (see `docs/splunk-blocker.md`). All code paths are preserved so a
-  single config flip re-activates this transport when SLIM is available.
+* **SplunkAITransport** — runs SPL `| ai prompt=... provider=<name>
+  model=<model>` via `/services/search/jobs/oneshot`. Used for both
+  the `transport = "splunk_ai"` shape (true Splunk-Hosted Models on a
+  SLIM-provisioned account) and the `transport = "aitk_ollama"` shape
+  (AITK Connection Management routing to local Ollama). See
+  `docs/aitk-ollama.md` and `docs/splunk-blocker.md` for the routing
+  matrix and trial-account notes.
 
 Both transports return raw text; the reasoner does the JSON parsing
 (when format_schema enforcement is active, the text *is* the JSON).
@@ -47,14 +50,14 @@ class LLMTransport(Protocol):
 
 
 class OllamaTransport:
-    """Local Ollama (`qwen2.5:3b`, `gemma2:2b`, ...) via /api/chat."""
+    """Local Ollama (`gpt-oss:20b`, `qwen2.5:3b`, `gemma2:2b`, ...) via /api/chat."""
 
     name = "ollama"
 
     def __init__(
         self,
         url: str = "http://127.0.0.1:11434",
-        model: str = "qwen2.5:3b",
+        model: str = "gpt-oss:20b",
         timeout_secs: float = 60.0,
         format_schema: dict[str, Any] | None = None,
     ):
@@ -97,7 +100,24 @@ class OllamaTransport:
 
 
 class SplunkAITransport:
-    """Splunk AI Toolkit `| ai` SPL transport. Hibernated until SLIM access lands."""
+    """Splunk AI Toolkit `| ai` SPL transport.
+
+    `provider` is the AITK Connection Management name. Two real-world values:
+
+    * `"splunk_hosted"`  - SLIM-backed Hosted Models. Gated on the 14-day
+      Cloud trial (see `docs/splunk-blocker.md`).
+    * `"ollama_local"`   - user-defined Ollama LLM connection in AITK.
+      Works on Splunk Enterprise (Developer License) with **zero SLIM
+      gating** (see `docs/aitk-ollama.md`).
+
+    Either way, the transport runs SPL of the shape:
+
+        | makeresults
+        | eval prompt="..."
+        | ai prompt=prompt provider=<provider> model=<model>
+
+    via `/services/search/jobs/oneshot` and returns the resulting text.
+    """
 
     name = "splunk_ai"
 
@@ -110,6 +130,11 @@ class SplunkAITransport:
         self.splunk = splunk
         self.provider = provider
         self.model = model
+        log.info(
+            "SplunkAITransport initialised: provider=%s model=%s",
+            self.provider,
+            self.model,
+        )
 
     async def close(self) -> None:
         # The agent owns the SplunkClient lifecycle; transport does not close it.
@@ -120,7 +145,12 @@ class SplunkAITransport:
         try:
             rows = await self.splunk.oneshot(spl)
         except Exception as exc:
-            log.warning("splunk |ai call failed: %s", exc)
+            log.warning(
+                "splunk |ai call failed (provider=%s model=%s): %s",
+                self.provider,
+                self.model,
+                exc,
+            )
             return ""
         return self._extract_text(rows)
 

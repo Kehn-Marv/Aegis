@@ -18,12 +18,32 @@ from collections import deque
 from dataclasses import dataclass, field
 
 from .gateway_client import GatewayClient
-from .models import GatewayStatus, Observation, TopSignature, TrajectoryLabel, Trends
+from .models import (
+    CdtsmForecast,
+    GatewayStatus,
+    Observation,
+    TopSignature,
+    TrajectoryLabel,
+    Trends,
+)
 from .splunk_client import SplunkClient
 
 log = logging.getLogger("aegis_ops.observer")
 
 TOP_N_SIGNATURES = 5
+
+
+@dataclass
+class CdtsmCfg:
+    """Shallow projection of `ObserveCfg` consumed by the observer."""
+
+    enabled: bool = False
+    horizon_minutes: int = 15
+    history_window: str = "-2h"
+    queue_spl: str = ""
+    queue_threshold: int = 4096
+    savings_spl: str = ""
+    savings_drop_threshold_pct: float = 75.0
 
 
 @dataclass
@@ -54,10 +74,12 @@ class Observer:
         splunk: SplunkClient | None,
         earliest: str = "-5m",
         latest: str = "now",
+        cdtsm: CdtsmCfg | None = None,
     ):
         self.splunk = splunk
         self.earliest = earliest
         self.latest = latest
+        self.cdtsm = cdtsm or CdtsmCfg()
         self._history: dict[str, _GatewayHistory] = {}
 
     async def observe(self, gateway_name: str, gateway: GatewayClient) -> Observation:
@@ -72,6 +94,8 @@ class Observer:
         routine_count = 0
         unknown_count = 0
 
+        forecasts: list[CdtsmForecast] = []
+
         if self.splunk is None:
             notes.append("splunk_disabled: running without SPL observations")
         else:
@@ -85,6 +109,11 @@ class Observer:
                 )
             except Exception as exc:
                 notes.append(f"classifier_counts_unavailable: {exc}")
+            if self.cdtsm.enabled:
+                try:
+                    forecasts = await self._cdtsm_forecasts(gateway_name)
+                except Exception as exc:
+                    notes.append(f"cdtsm_unavailable: {exc}")
 
         trends = self._compute_trends(hist, now, status, anomaly_count)
 
@@ -97,6 +126,7 @@ class Observer:
             routine_count_5m=routine_count,
             unknown_count_5m=unknown_count,
             trends=trends,
+            forecasts=forecasts,
             notes=notes,
         )
 
@@ -140,6 +170,57 @@ class Observer:
                     classification_confidence=conf_val,
                 )
             )
+        return out
+
+    async def _cdtsm_forecasts(self, gateway_name: str) -> list[CdtsmForecast]:
+        """Run the queue + dedup-savings CDTSM forecasts and summarise them."""
+        assert self.splunk is not None
+        out: list[CdtsmForecast] = []
+        horizon = self.cdtsm.horizon_minutes
+        earliest = self.cdtsm.history_window
+
+        if self.cdtsm.queue_spl:
+            try:
+                rows = await self.splunk.oneshot(
+                    self.cdtsm.queue_spl.format(
+                        gateway=gateway_name, horizon=horizon
+                    ),
+                    earliest=earliest,
+                    latest="now",
+                )
+                fc = _summarise_forecast(
+                    rows,
+                    metric="queue_depth",
+                    horizon_minutes=horizon,
+                    threshold=float(self.cdtsm.queue_threshold),
+                    breach_is_above=True,
+                )
+                if fc is not None:
+                    out.append(fc)
+            except Exception as exc:
+                log.warning("CDTSM queue forecast failed for %s: %s", gateway_name, exc)
+
+        if self.cdtsm.savings_spl:
+            try:
+                rows = await self.splunk.oneshot(
+                    self.cdtsm.savings_spl.format(
+                        gateway=gateway_name, horizon=horizon
+                    ),
+                    earliest=earliest,
+                    latest="now",
+                )
+                fc = _summarise_forecast(
+                    rows,
+                    metric="dedup_savings_pct",
+                    horizon_minutes=horizon,
+                    threshold=float(self.cdtsm.savings_drop_threshold_pct),
+                    breach_is_above=False,
+                )
+                if fc is not None:
+                    out.append(fc)
+            except Exception as exc:
+                log.warning("CDTSM savings forecast failed for %s: %s", gateway_name, exc)
+
         return out
 
     async def _classifier_counts(self, gateway_name: str) -> tuple[int, int, int]:
@@ -204,6 +285,59 @@ class Observer:
             queue_growing=queue_growing,
             trajectory=trajectory,
         )
+
+
+def _summarise_forecast(
+    rows: list[dict],
+    *,
+    metric: str,
+    horizon_minutes: int,
+    threshold: float,
+    breach_is_above: bool,
+) -> CdtsmForecast | None:
+    """Pull `predicted(metric)` peak (max) or trough (min) from CDTSM rows.
+
+    CDTSM names its forecast column either `predicted(<metric>)` or
+    `<metric>` depending on AITK version + the `show_input` flag. We
+    look for the predicted column first, then fall back.
+    """
+    candidate_keys = (f"predicted({metric})", f"prediction({metric})", metric)
+    values: list[tuple[int, float]] = []
+    for idx, row in enumerate(rows):
+        raw = None
+        for key in candidate_keys:
+            if key in row and row[key] not in (None, ""):
+                raw = row[key]
+                break
+        if raw is None:
+            continue
+        if isinstance(raw, list):
+            raw = raw[0] if raw else None
+        if raw is None:
+            continue
+        try:
+            values.append((idx, float(raw)))
+        except (TypeError, ValueError):
+            continue
+    if not values:
+        return None
+
+    if breach_is_above:
+        peak_idx, peak_val = max(values, key=lambda iv: iv[1])
+        breached = peak_val >= threshold
+    else:
+        peak_idx, peak_val = min(values, key=lambda iv: iv[1])
+        breached = peak_val <= threshold
+
+    return CdtsmForecast(
+        metric=metric,
+        horizon_minutes=horizon_minutes,
+        peak_predicted=peak_val,
+        minutes_to_peak=peak_idx + 1,
+        threshold=threshold,
+        breached=breached,
+        confidence_band_pct=90,
+    )
 
 
 def _classify_trajectory(

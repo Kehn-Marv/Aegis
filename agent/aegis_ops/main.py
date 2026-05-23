@@ -14,10 +14,11 @@ from .auditor import Auditor
 from .config import AegisOpsCfg, LLMCfg
 from .gateway_client import GatewayClient
 from .models import Decision, DecisionRecord
-from .observer import Observer
+from .observer import CdtsmCfg, Observer
 from .policy import PolicyEngine
 from .reasoner import Reasoner
 from .splunk_client import SplunkClient
+from .splunk_mcp_client import SplunkMcpClient
 from .transports import LLMTransport, OllamaTransport, SplunkAITransport
 
 log = logging.getLogger("aegis_ops")
@@ -57,10 +58,20 @@ def run(
 async def _main_loop(cfg: AegisOpsCfg, *, dry_run: bool, once: bool) -> None:
     splunk: SplunkClient | None = None
     if cfg.splunk.enabled:
+        mcp: SplunkMcpClient | None = None
+        if cfg.splunk.mcp_enabled:
+            mcp = SplunkMcpClient(
+                endpoint=cfg.splunk.mcp.endpoint,
+                token=cfg.splunk.token,
+                verify_tls=cfg.splunk.mcp.verify_tls,
+                timeout=cfg.splunk.mcp.timeout_secs,
+                tool_name=cfg.splunk.mcp.tool_name_or_none,
+            )
         splunk = SplunkClient(
             url=cfg.splunk.url,
             token=cfg.splunk.token,
             verify_tls=cfg.splunk.verify_tls,
+            mcp=mcp,
         )
 
     transport = _build_transport(cfg.llm, splunk)
@@ -69,6 +80,15 @@ async def _main_loop(cfg: AegisOpsCfg, *, dry_run: bool, once: bool) -> None:
         splunk=splunk,
         earliest=cfg.splunk.earliest,
         latest=cfg.splunk.latest,
+        cdtsm=CdtsmCfg(
+            enabled=cfg.observe.cdtsm_enabled and cfg.splunk.enabled,
+            horizon_minutes=cfg.observe.cdtsm_horizon_minutes,
+            history_window=cfg.observe.cdtsm_history_window,
+            queue_spl=cfg.observe.queue_forecast_spl,
+            queue_threshold=cfg.observe.queue_forecast_breach_threshold,
+            savings_spl=cfg.observe.savings_forecast_spl,
+            savings_drop_threshold_pct=cfg.observe.savings_forecast_drop_threshold_pct,
+        ),
     )
     reasoner = Reasoner(transport=transport)
     policy = PolicyEngine(
@@ -86,7 +106,7 @@ async def _main_loop(cfg: AegisOpsCfg, *, dry_run: bool, once: bool) -> None:
         cfg.policy.mode,
         dry_run,
         transport.name,
-        "on" if cfg.splunk.enabled else "off",
+        f"on/{splunk.transport_label}" if splunk is not None else "off",
         "on" if cfg.audit.enabled and not dry_run else "off",
     )
 
@@ -124,8 +144,8 @@ async def _main_loop(cfg: AegisOpsCfg, *, dry_run: bool, once: bool) -> None:
 
 def _build_transport(cfg: LLMCfg, splunk: SplunkClient | None) -> LLMTransport:
     if cfg.transport == "ollama":
-        # Enforce the Decision JSON schema at decode time so even
-        # small 3B models like qwen2.5:3b can't emit malformed JSON.
+        # Enforce the Decision JSON schema at decode time so even small
+        # models (e.g. qwen2.5:3b downshift) can't emit malformed JSON.
         schema = Decision.model_json_schema() if cfg.ollama.enforce_schema else None
         return OllamaTransport(
             url=cfg.ollama.url,
@@ -143,6 +163,21 @@ def _build_transport(cfg: LLMCfg, splunk: SplunkClient | None) -> LLMTransport:
             splunk=splunk,
             provider=cfg.splunk_ai.provider,
             model=cfg.splunk_ai.model,
+        )
+    if cfg.transport == "aitk_ollama":
+        # Sugar for splunk_ai pre-wired to a user-defined AITK Ollama
+        # connection. Same code path, more honest config.
+        # See docs/aitk-ollama.md for the AITK Connection Management setup.
+        if splunk is None:
+            raise RuntimeError(
+                "llm.transport='aitk_ollama' requires [splunk] url+token to be set "
+                "(the AITK `| ai` command runs inside Splunk). "
+                "See docs/aitk-ollama.md for setup."
+            )
+        return SplunkAITransport(
+            splunk=splunk,
+            provider=cfg.aitk_ollama.provider,
+            model=cfg.aitk_ollama.model,
         )
     raise ValueError(f"unknown llm.transport: {cfg.transport!r}")
 

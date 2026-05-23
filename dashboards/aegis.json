@@ -85,6 +85,28 @@
       "title": "First-occurrence events — last 1h",
       "description": "How many *new* signatures the gateway saw over time. Spikes here usually mean a deploy or an incident.",
       "dataSources": { "primary": "ds_first_occurrences" }
+    },
+    "viz_cdtsm_queue_forecast": {
+      "type": "splunk.line",
+      "title": "Queue depth — 15-min forecast (CDTSM)",
+      "description": "Cisco Deep Time Series Model (Splunk Hosted) forecast of queue_depth. If the predicted line crosses the gateway's `bus.capacity`, AegisOps will receive an early-warning signal and can drop noisy signatures pre-emptively before backpressure starts dropping anomalies.",
+      "options": {
+        "yAxisTitleText": "events",
+        "legendDisplay": "right",
+        "showRoundedY2AxisLabels": false
+      },
+      "dataSources": { "primary": "ds_cdtsm_queue_forecast" }
+    },
+    "viz_cdtsm_savings_forecast": {
+      "type": "splunk.line",
+      "title": "Dedup savings % — 15-min forecast (CDTSM)",
+      "description": "Forecast of dedup_savings_pct. A sustained drop predicted in this metric is a leading indicator that the suppression model is losing fit (i.e. a new app deploy is producing signatures the embedding model hasn't clustered yet).",
+      "options": {
+        "yAxisTitleText": "%",
+        "legendDisplay": "right",
+        "showRoundedY2AxisLabels": false
+      },
+      "dataSources": { "primary": "ds_cdtsm_savings_forecast" }
     }
   },
   "dataSources": {
@@ -135,6 +157,22 @@
         "queryParameters": { "earliest": "-1h", "latest": "now" }
       },
       "name": "First-occurrence rate"
+    },
+    "ds_cdtsm_queue_forecast": {
+      "type": "ds.search",
+      "options": {
+        "query": "index=aegis sourcetype=aegis:selfmetric | timechart span=1m latest(queue_depth) AS queue_depth | apply CDTSM queue_depth time_field=_time forecast_k=15 conf_interval=90 show_input=true",
+        "queryParameters": { "earliest": "-2h", "latest": "now" }
+      },
+      "name": "CDTSM forecast — queue depth"
+    },
+    "ds_cdtsm_savings_forecast": {
+      "type": "ds.search",
+      "options": {
+        "query": "index=aegis sourcetype=aegis:selfmetric | timechart span=1m latest(dedup_savings_pct) AS dedup_savings_pct | apply CDTSM dedup_savings_pct time_field=_time forecast_k=15 conf_interval=90 show_input=true",
+        "queryParameters": { "earliest": "-2h", "latest": "now" }
+      },
+      "name": "CDTSM forecast — dedup savings %"
     }
   },
   "defaults": {
@@ -155,20 +193,22 @@
     "type": "absolute",
     "options": {
       "width": 1440,
-      "height": 920,
+      "height": 1260,
       "display": "auto-scale",
       "backgroundColor": "#050816"
     },
     "structure": [
-      { "item": "viz_headline_dedup",     "type": "block", "position": { "x":   0, "y":   0, "w": 360, "h": 160 } },
-      { "item": "viz_headline_events_in", "type": "block", "position": { "x": 360, "y":   0, "w": 360, "h": 160 } },
-      { "item": "viz_headline_events_out","type": "block", "position": { "x": 720, "y":   0, "w": 360, "h": 160 } },
-      { "item": "viz_queue_depth",        "type": "block", "position": { "x":1080, "y":   0, "w": 360, "h": 160 } },
-      { "item": "viz_events_over_time",   "type": "block", "position": { "x":   0, "y": 170, "w": 960, "h": 320 } },
-      { "item": "viz_classification",     "type": "block", "position": { "x": 960, "y": 170, "w": 480, "h": 320 } },
-      { "item": "viz_top_signatures",     "type": "block", "position": { "x":   0, "y": 500, "w": 960, "h": 400 } },
-      { "item": "viz_strategy_breakdown", "type": "block", "position": { "x": 960, "y": 500, "w": 480, "h": 195 } },
-      { "item": "viz_first_occurrences",  "type": "block", "position": { "x": 960, "y": 705, "w": 480, "h": 195 } }
+      { "item": "viz_headline_dedup",         "type": "block", "position": { "x":   0, "y":   0, "w": 360, "h": 160 } },
+      { "item": "viz_headline_events_in",     "type": "block", "position": { "x": 360, "y":   0, "w": 360, "h": 160 } },
+      { "item": "viz_headline_events_out",    "type": "block", "position": { "x": 720, "y":   0, "w": 360, "h": 160 } },
+      { "item": "viz_queue_depth",            "type": "block", "position": { "x":1080, "y":   0, "w": 360, "h": 160 } },
+      { "item": "viz_events_over_time",       "type": "block", "position": { "x":   0, "y": 170, "w": 960, "h": 320 } },
+      { "item": "viz_classification",         "type": "block", "position": { "x": 960, "y": 170, "w": 480, "h": 320 } },
+      { "item": "viz_top_signatures",         "type": "block", "position": { "x":   0, "y": 500, "w": 960, "h": 400 } },
+      { "item": "viz_strategy_breakdown",     "type": "block", "position": { "x": 960, "y": 500, "w": 480, "h": 195 } },
+      { "item": "viz_first_occurrences",      "type": "block", "position": { "x": 960, "y": 705, "w": 480, "h": 195 } },
+      { "item": "viz_cdtsm_queue_forecast",   "type": "block", "position": { "x":   0, "y": 910, "w": 720, "h": 320 } },
+      { "item": "viz_cdtsm_savings_forecast", "type": "block", "position": { "x": 720, "y": 910, "w": 720, "h": 320 } }
     ],
     "globalInputs": ["input_time"]
   }

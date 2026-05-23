@@ -3,28 +3,49 @@
 [![License: MIT](https://img.shields.io/badge/license-MIT-3DDC97?style=flat-square)](LICENSE)
 [![Rust](https://img.shields.io/badge/rust-stable-EB6228?style=flat-square&logo=rust)](Cargo.toml)
 [![Python](https://img.shields.io/badge/python-3.11+-3776AB?style=flat-square&logo=python&logoColor=white)](sidecar/pyproject.toml)
-[![MCP](https://img.shields.io/badge/Splunk-MCP%20ready-7C5CFF?style=flat-square)](docs/mcp.md)
-[![Ollama](https://img.shields.io/badge/LLM-Ollama%20qwen2.5%3A3b-7C5CFF?style=flat-square)](docs/splunk-blocker.md)
+[![MCP bidirectional](https://img.shields.io/badge/MCP-server%20%2B%20client-7C5CFF?style=flat-square)](docs/mcp.md)
+[![splunklib.ai](https://img.shields.io/badge/splunklib.ai-Custom%20Alert%20%2B%20SPL%20Command-7C5CFF?style=flat-square)](apps/aegis_ai/README.md)
+[![AppInspect](https://img.shields.io/badge/AppInspect-0%20failures-3DDC97?style=flat-square)](apps/aegis_ai/appinspect-report.json)
+[![CDTSM](https://img.shields.io/badge/Hosted%20Models-CDTSM%20forecast-7C5CFF?style=flat-square)](docs/cdtsm-forecast.md)
+[![LLM](https://img.shields.io/badge/LLM-gpt--oss%3A20b%20via%20AITK%20%2F%20Ollama-7C5CFF?style=flat-square)](docs/aitk-ollama.md)
 
 > **Splunk Agentic Ops Hackathon 2026** · Observability track ·
-> targeting *Best Use of Splunk MCP Server*, *Best Use of Splunk Hosted Models*,
-> and *Best of Observability*.
+> targeting *Best Use of Splunk MCP Server*, *Best Use of Splunk
+> Hosted Models*, *Best Use of Splunk Developer Tools*, and *Best of
+> Observability*.
 
-A **local-first, MCP-controllable** observability middleware that sits
-between your applications and Splunk. It deduplicates repetitive error
-loops into lightweight metrics, summarizes routine traffic, buffers
-everything offline with anomaly-first priority, and can be commanded by
-a remote AI agent (via MCP) to stream full raw logs on demand for deep
-troubleshooting.
+A **Splunk-native, MCP-bidirectional** observability middleware that
+sits between your applications and Splunk. It deduplicates repetitive
+error loops into lightweight metrics, forecasts its own saturation
+with the **Cisco Deep Time Series Model**, ships a
+**`splunk-appinspect`-clean Splunk app** that grades alerts through
+`splunklib.ai.Agent`, and is controllable end-to-end over MCP — both
+*by* external AI agents (Cursor, Claude Desktop) and *from* an
+autonomous AegisOps agent that itself uses
+`splunk_run_query` over MCP JSON-RPC.
+
+## What's in this repo for the hackathon
+
+| Pillar | What it is | Where |
+|---|---|---|
+| 🛡️ **Edge gateway** | Rust daemon that hashes structural signatures, collapses repeat lines into metric events, buffers offline with anomaly-first drain | `gateway/`, [`docs/finops-math.md`](docs/finops-math.md) |
+| 🧠 **Aegis AI Splunk App** | Splunkbase-shaped app with **Custom Alert Action** + `\| aegisreason` **Custom Search Command**, both running `splunklib.ai.Agent`. 0 AppInspect failures. | [`apps/aegis_ai/`](apps/aegis_ai/) |
+| 🔮 **CDTSM forecast loop** | Dashboard panels + AegisOps prompt-hint loop using Splunk-Hosted CDTSM to predict `queue_depth` and `dedup_savings_pct` 15 min ahead | [`docs/cdtsm-forecast.md`](docs/cdtsm-forecast.md) |
+| 🔌 **MCP both ways** | Aegis hosts its own MCP server (`aegis-mcp`, 5 tools); AegisOps Agent is a real MCP client of `splunk_run_query` via JSON-RPC | [`docs/mcp.md`](docs/mcp.md) |
+| 🤖 **AegisOps Agent** | Autonomous Python agent (observe → reason → act) with three live LLM transports: raw Ollama, AITK-routed Ollama, true Splunk Hosted Models | [`agent/README.md`](agent/README.md) |
+| 📊 **Dashboard Studio** | 11-panel dashboard with the two new CDTSM forecast lines | [`dashboards/aegis.json`](dashboards/aegis.json) |
 
 **Where to look first:**
 
 * [`ARCHITECTURE.md`](ARCHITECTURE.md) — root-level technical diagram
 * [`docs/architecture.md`](docs/architecture.md) — deep-dive with data flows
 * [`docs/finops-math.md`](docs/finops-math.md) — verifiable cost-savings worked example (99.96% reduction)
-* [`docs/mcp.md`](docs/mcp.md) — Cursor & Claude Desktop integration snippets
+* [`docs/mcp.md`](docs/mcp.md) — Aegis MCP server + AegisOps as MCP client of Splunk MCP
+* [`docs/aitk-ollama.md`](docs/aitk-ollama.md) — AITK Connection Management + local Ollama for live `| ai` SPL
+* [`docs/cdtsm-forecast.md`](docs/cdtsm-forecast.md) — CDTSM dashboard panels and the agent feedback loop
 * [`docs/saia-integration.md`](docs/saia-integration.md) — using Splunk AI Assistant 2.0 alongside Aegis
-* [`docs/splunk-blocker.md`](docs/splunk-blocker.md) — Splunk Hosted Models trial-account blocker + Ollama Plan B
+* [`docs/splunk-blocker.md`](docs/splunk-blocker.md) — Splunk Hosted Models SLIM-trial blocker and the two live workarounds
+* [`apps/aegis_ai/README.md`](apps/aegis_ai/README.md) — Splunk app docs + AppInspect status
 * [`agent/README.md`](agent/README.md) — autonomous AegisOps agent (observe → reason → act)
 
 It is built for two failure modes the rest of the observability stack ignores:
@@ -53,14 +74,18 @@ during an outage can spike ingest 100× overnight.
 **Outcome:** Aegis deployed as a DaemonSet (or systemd service) on each
 node/region cuts repetitive error spam by ~99.96% at the edge
 ([`docs/finops-math.md`](docs/finops-math.md)), keeps anomalies
-first-in-line during uplink loss, and lets an autonomous **AegisOps
-Agent** (`agent/`) watch the fleet and act via a pluggable LLM
-transport — local Ollama (`qwen2.5:3b`, runs in ~3 GB RAM) by
-default, Splunk Hosted Models (`| ai`) when the account is
-provisioned — without an operator in the prompt loop.
+first-in-line during uplink loss, lets an autonomous **AegisOps
+Agent** (`agent/`) watch the fleet and act via three live LLM
+transports — raw Ollama (`gpt-oss:20b`, edge-first default), AITK +
+Ollama via the `| ai` SPL command, or true Splunk Hosted Models when
+SLIM is provisioned — and pairs with the **Aegis AI Splunk app**
+(`apps/aegis_ai/`) that uses `splunklib.ai.Agent` to grade each
+alert through a Custom Alert Action and a `| aegisreason` Custom
+Search Command (AppInspect: 0 failures).
 
 This is not a generic log forwarder. It is **FinOps guardrails +
-agentic edge control** purpose-built for Splunk's Observability track.
+predictive + agentic edge control** purpose-built for Splunk's
+Observability track.
 
 ## Architecture
 
@@ -71,14 +96,21 @@ the full deep-dive see [`docs/architecture.md`](docs/architecture.md).
 Microservice ──raw──▶ Aegis Gateway ──processed──▶ Splunk HEC ──▶ Splunk Core
                           │  ▲                                         │
                           │  └──MCP commands──┐                        ▼
-                          │                   │              AI Agent Monitoring
-                          ▼                   │                  Dashboard
-                   Python AI Sidecar    External AI Agent
-                  (embeddings, cluster) (Cursor / Claude Desktop)
+                          │                   │                 Dashboards
+                          ▼                   │              (incl. CDTSM forecast)
+                   Python AI Sidecar    External AI Agent              │
+                  (embeddings, cluster) (Cursor / Claude Desktop)      │
+                                                                       ▼
+                  AegisOps Agent (autonomous observe→reason→act)  ◀──── │ ai SPL via AITK
+                  └─ LLM transport: ollama (default) │ aitk_ollama │ splunk_ai
+                  └─ Splunk client:  REST oneshot   │ MCP tools/call (auto-detect)
+                  └─ Reads CDTSM forecast → "predictive signal" hint to LLM
+                  └─ Audits decisions to index=aegis sourcetype=aegis:agent
 
-                  AegisOps Agent (autonomous loop)
-                  └─ LLM transport: Ollama (default) │ Splunk |ai (hibernated)
-                  └─ REST → Aegis  │  SPL → Splunk  │  HEC → audit
+                  Aegis AI Splunk App  (apps/aegis_ai/, AppInspect clean)
+                  └─ Custom Alert Action  ─┐
+                  └─ |aegisreason CSC      ├─ splunklib.ai.OpenAIModel + Agent
+                                            └─ base_url → Ollama / AITK / Hosted
 ```
 
 ## Repository layout
@@ -91,28 +123,40 @@ Microservice ──raw──▶ Aegis Gateway ──processed──▶ Splunk HE
 │   └── aegis-daemon/        # binary that wires core + mcp together
 ├── sidecar/                 # Python AI sidecar (embeddings, clustering, hosted-model adapter)
 ├── ui/                      # React + Vite + Tailwind control panel
-├── dashboards/              # Splunk Dashboard Studio JSON
+├── dashboards/              # Splunk Dashboard Studio JSON (11 panels + 2 CDTSM forecasts)
+├── apps/
+│   └── aegis_ai/            # Splunkbase-shaped app: splunklib.ai Custom Alert Action + | aegisreason CSC
 ├── agent/                   # AegisOps autonomous agent (observe → reason → act)
+│   └── aegis_ops/
+│       ├── splunk_mcp_client.py   # JSON-RPC 2.0 MCP client for Splunk MCP Server
+│       └── transports.py          # ollama / splunk_ai / aitk_ollama
 ├── demo/                    # log spammer + canned smoke-test payloads + multi-edge launcher
 ├── configs/                 # example configuration files (demo, live, multi-edge)
-└── docs/                    # architecture, MCP integration, FinOps math, SAIA notes
+├── dist/                    # build artefacts (Splunk app tarball; gitignored)
+└── docs/                    # architecture, MCP, AITK+Ollama, CDTSM forecast, FinOps math, SAIA notes
 ```
 
 ---
 
 # Setup
 
-There are two setup paths depending on what you want to see:
+There are three setup paths depending on what you want to see:
 
 * **Path A — Demo mode** — runs without Splunk. Best for understanding
   what the gateway does. **~5 minutes**, only needs Rust + Python 3.
 * **Path B — Live mode (real Splunk)** — wires Aegis into a Splunk
-  Enterprise instance with HEC. Best for the actual production use
-  case and for the agentic / dashboard demos. **~30 minutes** if you
-  also have to install Splunk.
+  Enterprise instance with HEC + the Aegis AI Splunk app + the AITK
+  `| ai` SPL command. Best for the actual production use case and for
+  the agentic / dashboard demos. **~30 minutes** if you also have to
+  install Splunk. See also
+  [`docs/aitk-ollama.md`](docs/aitk-ollama.md) for the AITK + Ollama
+  setup and [`apps/aegis_ai/README.md`](apps/aegis_ai/README.md) for
+  the `splunklib.ai` app.
 * **Path C — Full stack (multi-edge + AegisOps Agent)** — two regional
-  gateways plus the autonomous agent loop. Requires Path B credentials
-  (Splunk auth token + HEC). See [Path C](#path-c--full-stack-multi-edge--aegisops-agent).
+  gateways plus the autonomous agent loop, optionally with the
+  CDTSM forecast loop and MCP-routed observations. Requires Path B
+  credentials (Splunk auth token + HEC). See
+  [Path C](#path-c--full-stack-multi-edge--aegisops-agent).
 
 Both paths share the same prerequisites below. Add Splunk + an HEC
 token for Path B. Add Node and/or Python sidecar packages for the
@@ -404,7 +448,7 @@ low-risk decisions (`diagnostic`) while logging everything to
 
 | Prerequisite | Where to get it |
 |--------------|-----------------|
-| **Ollama** (mandatory) | <https://ollama.com/download>, then `ollama pull qwen2.5:3b` (1.9 GB on disk, ~3 GB RAM — runs comfortably on 6-8 GB systems). Lower-spec: `gemma2:2b` (~2 GB) or `qwen2.5:1.5b` (~1.5 GB). Higher-spec: `qwen2.5:7b` (~5 GB). Set the picked model in `[llm.ollama].model` |
+| **Ollama** (mandatory) | <https://ollama.com/download>, then `ollama pull gpt-oss:20b` (~13 GB on disk, ~16 GB RAM — matches the `gpt-oss-20b` Splunk Hosted Models identifier). Smaller-RAM alternatives: `qwen2.5:7b` (~5 GB), `qwen2.5:3b` (~3 GB, explicitly tuned for JSON), `gemma2:2b` (~2 GB), `qwen2.5:1.5b` (~1.5 GB). Set the picked model in `[llm.ollama].model` |
 | Splunk auth token (optional, lights up SPL observations) | *Settings → Tokens → New Token* with `search` capability |
 | Splunk HEC token (optional, lights up agent audit trail) | *Settings → Data inputs → HTTP Event Collector* |
 | Splunk SLIM API (only for `[llm].transport="splunk_ai"`) | **Currently trial-gated.** See [`docs/splunk-blocker.md`](docs/splunk-blocker.md) |

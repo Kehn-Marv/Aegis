@@ -53,10 +53,37 @@ Heuristics that should bias your decisions:
     recommend diagnostic and mention the queue trend in justification.
   * reset is almost never the right answer; only suggest it if queue_depth
     is huge and growing AND events_in is dropping to zero.
+  * If `forecasts[*].breached` is true (CDTSM, Splunk-Hosted), treat that
+    as a strong predictive signal -- the metric is going to cross its
+    threshold within `minutes_to_peak` minutes. For queue_depth breaches,
+    prefer override on the top suppressed signature to relieve the queue
+    before it saturates. For dedup_savings_pct drops, prefer diagnostic
+    so the next window captures the new signatures driving the drop.
 
 Be honest about confidence. A flat boring observation should produce
 confidence ~0.95 noop, not a tortured "low-confidence" anomaly call.
 """
+
+
+def _forecast_hint(observation: Observation) -> str | None:
+    """If CDTSM forecasts a breach, surface it above the JSON blob."""
+    breaches = [f for f in observation.forecasts if f.breached]
+    if not breaches:
+        return None
+    lines = []
+    for fc in breaches:
+        direction = "rise to" if fc.metric == "queue_depth" else "fall to"
+        lines.append(
+            f"  - {fc.metric}: CDTSM ({fc.confidence_band_pct}% CI) predicts "
+            f"value will {direction} {fc.peak_predicted:.1f} in "
+            f"{fc.minutes_to_peak} min (threshold {fc.threshold:g})."
+        )
+    body = "\n".join(lines)
+    return (
+        "PREDICTIVE SIGNAL from Splunk-Hosted CDTSM forecasts:\n"
+        f"{body}\n"
+        "Take this into account when picking action + duration."
+    )
 
 
 def build_user_prompt(observation: Observation) -> str:
@@ -66,11 +93,14 @@ def build_user_prompt(observation: Observation) -> str:
         indent=2,
         ensure_ascii=False,
     )
-    return (
+    hint = _forecast_hint(observation)
+    header = (
         "Observation for one gateway. Respond with exactly one JSON Decision "
-        "object, no other text.\n\n"
-        f"{obs_json}"
+        "object, no other text."
     )
+    if hint:
+        return f"{header}\n\n{hint}\n\n{obs_json}"
+    return f"{header}\n\n{obs_json}"
 
 
 def build_full_prompt(observation: Observation) -> str:

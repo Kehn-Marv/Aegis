@@ -12,19 +12,28 @@ flowchart LR
             ING["Ingest<br/>TCP / UDP / file-tail"]
             CORE["Processing Core<br/>signature hash · dedup<br/>· summarize"]
             QUEUE[("Priority Queue<br/>SQLite buffer")]
-            MCPSRV["MCP Server<br/>reset / status / diagnostic<br/>override / replay_raw"]
+            MCPSRV["MCP Server (aegis-mcp v0.1)<br/>reset / status / diagnostic<br/>override / replay_raw"]
             SELFM["Self-metrics<br/>emitter"]
         end
         SIDECAR["Python AI Sidecar<br/>embeddings · clustering"]
+        OLLAMA["Local Ollama<br/>gpt-oss:20b"]
+        OPS["AegisOps Agent<br/>observe → reason → act<br/>(+ CDTSM-aware)"]
     end
 
     subgraph Splunk["Central Splunk Environment"]
         HEC[/"HTTP Event Collector"/]
-        INDEX[("Indexed Events")]
-        DASH["AI Agent Monitoring<br/>Dashboard"]
-        SMCP["Splunk MCP Server<br/>SPL search · KOs"]
+        INDEX[("Indexed Events<br/>aegis:raw / metric /<br/>selfmetric / agent /<br/>aegis_ai:assessment")]
+        DASH["Dashboard Studio<br/>11 panels + CDTSM<br/>forecast lines"]
+        CDTSM["CDTSM Foundation Model<br/>(Splunk Hosted)<br/>| apply CDTSM"]
+        SMCP["Splunk MCP Server<br/>splunk_run_query<br/>via JSON-RPC tools/call"]
+        AITK["AI Toolkit<br/>Connection Mgmt<br/>| ai SPL"]
         SAIA["AI Assistant 2.0"]
-        HOSTED["Splunk Hosted Models<br/>gpt-oss · Foundation-Sec"]
+        HOSTED["Splunk Hosted Models<br/>gpt-oss-20b · Foundation-Sec"]
+        subgraph SPLUNKAPP["Aegis AI Splunk App"]
+            ALERT["Custom Alert Action<br/>aegis_severity_assessment"]
+            CSC["Custom Search Cmd<br/>| aegisreason"]
+            SDKAGENT["splunklib.ai<br/>OpenAIModel + Agent"]
+        end
     end
 
     AGENT["External AI Agent<br/>Cursor / Claude Desktop"]
@@ -38,20 +47,42 @@ flowchart LR
     SELFM -->|agent perf telemetry| HEC
     HEC --> INDEX
     INDEX --> DASH
+    INDEX --> CDTSM
+    CDTSM -->|forecast| DASH
+    CDTSM -->|forecast| OPS
 
-    AGENT <-->|MCP| SMCP
-    AGENT <-->|MCP| MCPSRV
+    AGENT <-->|MCP tools/call| SMCP
+    AGENT <-->|MCP tools/call| MCPSRV
     MCPSRV -.->|control commands| CORE
+
+    OPS -->|REST /api/*| MCPSRV
+    OPS -->|reason: ollama| OLLAMA
+    OPS -->|reason: aitk_ollama| AITK
+    OPS -.->|reason: splunk_ai<br/>when SLIM available| AITK
+    OPS -->|observe: MCP tools/call<br/>↳ REST oneshot fallback| SMCP
+    OPS -->|audit| HEC
+
+    AITK -->|provider=ollama_local| OLLAMA
+    AITK -.->|provider=splunk_hosted| HOSTED
+
+    INDEX -->|saved search trigger| ALERT
+    ALERT --> SDKAGENT
+    CSC --> SDKAGENT
+    SDKAGENT -->|OpenAI HTTP| OLLAMA
+    ALERT -->|index assessment| HEC
+
     SMCP --> INDEX
     SAIA <--> HOSTED
-    SAIA -.optional.-> SMCP
+    SIDECAR -.->|&#124; ai classify| AITK
 
     classDef edge fill:#0b3d2e,stroke:#3ddc97,color:#fff
     classDef splunk fill:#1a1a3e,stroke:#7c5cff,color:#fff
+    classDef splunkapp fill:#2a1a4e,stroke:#b58cff,color:#fff
     classDef agent fill:#3d2a0b,stroke:#ffb86b,color:#fff
-    class APP,ING,CORE,QUEUE,MCPSRV,SELFM,SIDECAR edge
-    class HEC,INDEX,DASH,SMCP,SAIA,HOSTED splunk
-    class AGENT agent
+    class APP,ING,CORE,QUEUE,MCPSRV,SELFM,SIDECAR,OLLAMA edge
+    class HEC,INDEX,DASH,SMCP,SAIA,HOSTED,AITK,CDTSM splunk
+    class ALERT,CSC,SDKAGENT splunkapp
+    class AGENT,OPS agent
 ```
 
 ## Data flow
@@ -103,14 +134,31 @@ Splunk again for the now-streamed raw lines."
 
 ## Why this wins the special prizes
 
-* **Best Use of Splunk MCP Server.** We don't just consume Splunk's MCP
-  Server — we ship a complementary MCP server that lets agents control
-  *edge* infrastructure. The demo shows both in the same agent session.
-* **Best Use of Splunk Hosted Models.** The sidecar's embedding / clustering
-  layer is wired to call Splunk Hosted Models (`gpt-oss-20b` or
-  `Foundation-Sec-1.1-8B-Instruct`) for semantic log analysis, keeping data
-  inside the Splunk security boundary. A local HuggingFace fallback is used
-  if hosted-model access is not provisioned.
-* **AI Agent Monitoring.** Aegis emits its own performance and reasoning
-  telemetry to Splunk so the dashboard literally shows the AI agent's
-  behavior in real time.
+* **Best Use of Splunk MCP Server.** Aegis is on **both sides** of MCP.
+  It hosts its own MCP server (`aegis-mcp v0.1`, five edge-control
+  tools) *and* the AegisOps agent is a real MCP **client** of
+  `splunk_run_query`, auto-detecting the search tool name from
+  `tools/list`. Every observational SPL the agent runs becomes a
+  JSON-RPC `tools/call` traceable in
+  `index=_internal sourcetype=mcpjson "tools/call"`. The demo shows a
+  single Cursor session with *both* servers registered.
+* **Best Use of Splunk Hosted Models.** Three live integrations:
+  (1) **CDTSM** dashboard forecast panels + agent feedback loop
+  ([`cdtsm-forecast.md`](cdtsm-forecast.md)),
+  (2) **AITK `| ai` SPL command** routed through AITK Connection
+  Management to local Ollama running `gpt-oss:20b` (the same model
+  identifier Splunk Hosted Models publishes) — see
+  [`aitk-ollama.md`](aitk-ollama.md),
+  (3) one-line config switch to **true SLIM-backed `splunk_hosted`**
+  when provisioned. The sidecar's semantic classifier path also goes
+  through AITK.
+* **Best Use of Splunk Developer Tools.** `apps/aegis_ai/` is a
+  Splunkbase-shaped Splunk app using `splunklib.ai.OpenAIModel` +
+  `Agent` to ship a **Custom Alert Action** and a `| aegisreason`
+  **Custom Search Command**, validated by `splunk-appinspect`
+  (0 failures, 0 future_failures). See
+  [`../apps/aegis_ai/README.md`](../apps/aegis_ai/README.md).
+* **AI Agent Monitoring.** Aegis emits its own performance and
+  reasoning telemetry (including the LLM transport choice and CDTSM
+  breach signals) so the dashboard literally shows the AI agent's
+  behavior — and predicted future behavior — in real time.

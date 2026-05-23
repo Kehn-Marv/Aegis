@@ -2,20 +2,23 @@
 
 Autonomous Python agent that closes the loop between Aegis edge
 gateways and Splunk. Polls each gateway, queries Splunk for recent
-telemetry the gateway emitted, **reasons with a local Ollama LLM
-(default: `qwen2.5:3b`, ~3 GB RAM) or a Splunk Hosted Model
-(hibernated)** about what to do next, and either acts autonomously
-(low-risk tools) or recommends an action for an operator to approve.
+telemetry the gateway emitted (optionally via the official **Splunk
+MCP Server** as a JSON-RPC client), reads **CDTSM forecasts** of its
+own future, **reasons with one of three live LLM transports**, and
+either acts autonomously (low-risk tools) or recommends an action for
+an operator to approve.
 
 Every decision — prompt, model response, action taken, result — is
 optionally logged to Splunk under `sourcetype=aegis:agent`.
 
-> **About the LLM transport.** This agent originally targeted Splunk
-> Hosted Models via the AI Toolkit `| ai` SPL command. The 14-day
-> Splunk Cloud trial does not provision the SLIM API, so we ship
-> Ollama as the default. The Splunk `| ai` integration is
-> **preserved, tested, and one config flag away** — see
-> [`../docs/splunk-blocker.md`](../docs/splunk-blocker.md).
+> **LLM transports at a glance.** Three transports, switchable by a
+> single config flag — see the table below. Default is raw Ollama
+> running `gpt-oss:20b` (the same model identifier published by
+> Splunk Hosted Models). Switch to `aitk_ollama` for the `| ai` SPL
+> command routed through Splunk's AI Toolkit Connection Management
+> (see [`../docs/aitk-ollama.md`](../docs/aitk-ollama.md)), or to
+> `splunk_ai` for true SLIM-backed Splunk-Hosted Models when
+> provisioned (see [`../docs/splunk-blocker.md`](../docs/splunk-blocker.md)).
 
 ## Why this exists
 
@@ -44,18 +47,19 @@ for each gateway in config:                                  # multi-edge
 
 ## LLM transports
 
-| Transport     | Status     | Requires                                    | File                                          |
-|---------------|------------|---------------------------------------------|-----------------------------------------------|
-| `ollama`      | **Default**| Local Ollama running `qwen2.5:3b` (~3 GB)   | `aegis_ops/transports.py :: OllamaTransport`  |
-| `splunk_ai`   | Hibernated | Splunk SLIM API access (trial-gated)        | `aegis_ops/transports.py :: SplunkAITransport` |
+| Transport       | Status     | Requires                                                                | File                                                              |
+|-----------------|------------|-------------------------------------------------------------------------|-------------------------------------------------------------------|
+| `ollama`        | **Default**| Local Ollama running `gpt-oss:20b` (~16 GB RAM) or smaller fallback     | `aegis_ops/transports.py :: OllamaTransport`                       |
+| `aitk_ollama`   | Live       | Splunk Enterprise + AI Toolkit + AITK Ollama LLM connection             | `aegis_ops/transports.py :: SplunkAITransport` (provider=ollama_local) |
+| `splunk_ai`     | One-line   | Splunk Cloud SLIM access (gated on 14-day trial)                        | `aegis_ops/transports.py :: SplunkAITransport` (provider=splunk_hosted) |
 
-Both produce the same JSON `Decision`. Switching is one line in
+All three produce the same JSON `Decision`. Switching is one line in
 `configs/aegis-ops.toml`.
 
 The Ollama transport also passes the `Decision` Pydantic JSON schema
 to Ollama's `format` parameter, which **enforces the schema at decode
-time** — so even a 3B model can't emit malformed JSON. Big reliability
-win on small machines.
+time** — so even a small model on a low-RAM machine can't emit
+malformed JSON. Big reliability win for development.
 
 ## Policy (the safety rail)
 
@@ -81,18 +85,20 @@ Policy is configurable in `configs/aegis-ops.toml`. Modes:
 
   | RAM (total system) | Model | Pull command | Disk | Active RAM |
   |---|---|---|---|---|
-  | **6–8 GB** (default) | `qwen2.5:3b` | `ollama pull qwen2.5:3b` | 1.9 GB | ~3 GB |
+  | **16 GB+** (default — matches Splunk Hosted Models name) | `gpt-oss:20b` | `ollama pull gpt-oss:20b` | ~13 GB | ~16 GB |
+  | 8–16 GB | `qwen2.5:7b` | `ollama pull qwen2.5:7b` | 4.5 GB | ~5 GB |
+  | 6–8 GB | `qwen2.5:3b` | `ollama pull qwen2.5:3b` | 1.9 GB | ~3 GB |
   | 4–6 GB | `gemma2:2b` | `ollama pull gemma2:2b` | 1.6 GB | ~2 GB |
   | <4 GB | `qwen2.5:1.5b` | `ollama pull qwen2.5:1.5b` | 1.0 GB | ~1.5 GB |
-  | 16 GB+ (best quality) | `qwen2.5:7b` | `ollama pull qwen2.5:7b` | 4.5 GB | ~5 GB |
 
-* Verify: `ollama run qwen2.5:3b "say hello"` should reply.
+* Verify: `ollama run gpt-oss:20b "say hello"` should reply (replace
+  with the smaller model you pulled if you downshifted).
 
 * If you pick a non-default model, set it in `configs/aegis-ops.toml`:
 
   ```toml
   [llm.ollama]
-  model = "gemma2:2b"   # or whichever you pulled
+  model = "qwen2.5:3b"   # or whichever you pulled
   ```
 
 ### 2. Launch the agent

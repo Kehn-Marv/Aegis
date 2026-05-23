@@ -1,30 +1,36 @@
-# Splunk Hosted Models — provisioning blocker and Plan B
+# Splunk Hosted Models — provisioning blocker and the three live transports
 
 > Honest writeup of an infrastructure wall hit during the Splunk
-> Agentic Ops Hackathon 2026 and the architectural pivot that kept
-> Aegis fully functional.
+> Agentic Ops Hackathon 2026 and the **two** architectural pivots that
+> keep Aegis fully functional end-to-end.
 
 ## TL;DR
 
-We tried to integrate Splunk Hosted Models (`gpt-oss-20b` via the
-AI Toolkit `| ai` SPL command). The 14-day Splunk Cloud trial that
-hackathon participants use does **not** provision the SLIM API the
-hosted models run on. Configuration writes return HTTP 500 from
-Splunk's REST surface.
+We originally targeted Splunk-Hosted Models (`gpt-oss-20b` via the
+AI Toolkit `| ai` SPL command, SLIM-backed). The 14-day Splunk Cloud
+trial does **not** provision SLIM, so direct Hosted-Models calls
+return HTTP 500.
 
-We have opened a support ticket on Devpost asking for the gate to be
-flipped. While we wait, the AegisOps agent runs against a **local
-Ollama instance hosting the same `gpt-oss:20b` model identifier**.
-All code paths for the Splunk transport are preserved; flipping
-`llm.transport = "splunk_ai"` in `agent/configs/aegis-ops.toml`
-re-activates the original path the moment SLIM access lands.
+We solved this **twice**, giving us three live LLM transports:
 
-## What we attempted
+| Transport | Where the model runs | Splunk surface? | Trial-safe? | Default? |
+|---|---|---|---|---|
+| **`ollama`** | Local Ollama next to the gateway | Bypassed | ✅ Yes | ✅ Yes (edge-first) |
+| **`aitk_ollama`** | Local Ollama, called *through* Splunk AITK `\| ai` | ✅ SPL `\| ai` command, audited in `_audit` | ✅ Yes (Developer License) | No (opt-in) |
+| **`splunk_ai`** | Splunk-Hosted Models (SLIM) `gpt-oss-20b` / `Foundation-Sec-1.1-8B` | ✅ SPL `\| ai` command | ❌ Gated on trial | No (provisioned envs only) |
+
+The whole transport surface is one config flag (`[llm].transport =
+"ollama" | "aitk_ollama" | "splunk_ai"`). All three exercise the same
+`SplunkAITransport` and `OllamaTransport` code paths so the demo is
+end-to-end functional today on a Developer License with zero waiting on
+Splunk sales.
+
+## What we attempted (direct SLIM path)
 
 End-to-end, in order:
 
-1. **Local Splunk Enterprise + Developer License** — confirmed Hosted
-   Models are Cloud-only.
+1. **Local Splunk Enterprise + Developer License** — confirmed
+   SLIM-backed Hosted Models are Cloud-only.
 2. **Splunk Cloud 14-day trial** — provisioned, logged in as
    `sc_admin`.
 3. **AI Toolkit app** — installed from Splunkbase. Upgraded to 5.7.4.
@@ -39,59 +45,85 @@ End-to-end, in order:
    `/servicesNS/...` from the AI Toolkit's own React app
    (DevTools console verified).
 7. **Search & Reporting `| makeresults | ai prompt=...`** — same
-   underlying error: no provider wired up, no SLIM endpoint reachable.
+   underlying error: no SLIM provider wired up.
 
 The 14-day automated trial's REST API is locked down to prevent
 abuse of the SLIM API. Provisioning Hosted Models on these trials
 requires a manual flip by a Splunk sales engineer or hackathon
-organizer.
+organiser.
 
-## Support request
+## Plan A′ — AITK Connection Management + local Ollama (LIVE)
 
-A formal request has been filed with the hackathon organizers asking
-for the trial environment to be upgraded so `splunk_hosted` shows up
-as a provider option. Verbatim message in [the project transcript].
+This is the path we should have started with. AITK 5.6+ supports
+**user-defined LLM connections**, and Ollama is one of the supported
+provider types out of the box (per the Lantern doc *Leveraging
+generative AI capability in security operations with the AITK*,
+section "Setup for the AITK AI command", which explicitly calls out
+Ollama as a supported on-prem LLM).
 
-If they respond and provision the account, flipping back is a single
-config line:
+So we get the **full `| ai` SPL experience** — audited in `_audit`,
+reproducible from saved searches, embeddable in dashboards — with the
+LLM call ultimately served by local Ollama on the same machine as
+Splunk Enterprise. No SLIM API. No 14-day trial gate.
+
+Full setup walkthrough: **[`docs/aitk-ollama.md`](aitk-ollama.md)**.
+
+To use this transport, set in `agent/configs/aegis-ops.toml`:
 
 ```toml
 [llm]
-transport = "splunk_ai"   # was "ollama"
+transport = "aitk_ollama"
+
+[llm.aitk_ollama]
+provider = "ollama_local"    # AITK connection name
+model    = "gpt-oss:20b"
+
+[splunk]
+url   = "https://localhost:8089"
+token = "your-splunk-auth-token-with-search"
 ```
 
-Plus paste the auth token into `[splunk]`. No code changes.
+The agent starts logging:
 
-## Plan B — Ollama as the local LLM transport
+```
+INFO SplunkAITransport initialised: provider=ollama_local model=gpt-oss:20b
+```
 
-### Why Ollama is actually a *better* fit (not a downgrade)
+…and every reasoning call now flows through Splunk's `| ai` command.
+**For prize-fit purposes, this is a genuine integration with the AI
+Toolkit and the SPL `| ai` surface that judges will see in the demo.**
 
-| Concern | Plan A (Splunk Hosted) | Plan B (Ollama) |
-|---------|-----------------------|-----------------|
-| Reasoning model | `gpt-oss-20b` (Splunk Hosted) | `qwen2.5:3b` (Ollama, ~3 GB RAM); upgrades to `qwen2.5:7b` or larger on bigger machines |
-| Where it runs | Splunk Cloud datacentre | Same machine as the Aegis edge gateway |
-| Round-trip latency | Network + Splunk search pipeline | Localhost, single process |
-| Network requirement | Always-on uplink to Splunk Cloud | None — works offline at the edge |
-| Cost per call | Splunk ingest + compute pricing | Free |
-| JSON reliability | Best-in-class | **Hard schema enforcement** via Ollama's `format` parameter so even a 3B model can't emit malformed `Decision` JSON |
-| Hackathon prize fit | "Best Use of Splunk Hosted Models" | Still demonstrates the SPL `\| ai` integration with code in `transports.SplunkAITransport`; hibernated, not deleted |
+## Plan B — raw Ollama (LIVE, default)
 
-Aegis's entire thesis is **edge-first observability**. Running the LLM
-locally next to the gateway is on-message, not off-message. The story
-gets *stronger*: "the gateway, the AI sidecar, and the agent's brain
-all live at the edge — Splunk gets pre-classified, pre-collapsed,
-audit-ready events".
+The original Plan B from the first iteration of this doc. Now reframed
+as the **edge-first default**: when the agent is deployed *at* an edge
+site (where the whole point is to keep traffic off the WAN), routing
+LLM calls back to a centralised Splunk Cloud is the opposite of what we
+want. So:
+
+* **`transport = "ollama"`** stays the default in
+  `agent/configs/aegis-ops.example.toml`.
+* It's the only transport that needs zero Splunk credentials at all.
+* It's also the only transport that survives an offline edge site.
+
+The Aegis AI Splunk app (`apps/aegis_ai/`) similarly uses raw Ollama
+via `splunklib.ai.OpenAIModel(base_url=…)` because the
+`splunklib.ai.Agent` SDK doesn't itself route through AITK — it speaks
+OpenAI-compatible HTTP directly. (See
+[`docs/aitk-ollama.md`](aitk-ollama.md), section "Wire it into the
+Aegis AI Splunk app", for the rationale.)
 
 ### Model selection by RAM
 
 | System RAM | Recommended model | Active RAM | Notes |
 |------------|-------------------|------------|-------|
-| **6–8 GB** | `qwen2.5:3b` (default) | ~3 GB | Qwen 2.5 is explicitly tuned for JSON output |
-| 4–6 GB | `gemma2:2b` | ~2 GB | Smaller but still solid |
+| **16 GB+** | `gpt-oss:20b` (default) | ~13 GB | Matches the Splunk Hosted Models name |
+| 8–16 GB | `qwen2.5:7b` | ~5 GB | Strong reasoning at moderate RAM |
+| **6–8 GB** | `qwen2.5:3b` | ~3 GB | Qwen 2.5 is explicitly tuned for JSON |
+| 4–6 GB | `gemma2:2b` | ~2 GB | Smaller but solid |
 | <4 GB | `qwen2.5:1.5b` | ~1.5 GB | Basic but functional |
-| 16 GB+ | `qwen2.5:7b` | ~5 GB | Highest quality available locally |
 
-### What's preserved for the Splunk path
+## What's preserved for the SLIM path (`transport = "splunk_ai"`)
 
 * `agent/aegis_ops/transports.py :: SplunkAITransport` — full
   `| ai` SPL builder + `oneshot` plumbing.
@@ -101,51 +133,27 @@ audit-ready events".
   for `| ai`. Wired through `hosted_model.py`.
 * All env-var contracts (`AEGIS_SPLUNK_URL`, `AEGIS_SPLUNK_TOKEN`,
   `AEGIS_SPLUNK_AI_*`) preserved.
-* All tests for both transports continue to pass (mocked HTTP).
 
-### What ships in Plan B
+Switching to true Splunk-Hosted Models on a provisioned account:
 
-* `agent/aegis_ops/transports.py :: OllamaTransport` — default. Calls
-  `POST /api/chat` on a local Ollama server with the agent's existing
-  prompt template (`prompts.build_full_prompt`) and parses the same
-  `Decision` JSON schema.
-* `agent/configs/aegis-ops.example.toml` ships with
-  `llm.transport = "ollama"` and `model = "gpt-oss:20b"`.
-* `[splunk]` and `[audit]` blocks are now **optional**. The agent runs
-  end-to-end with zero Splunk credentials:
-    * SPL observations skipped (live gateway REST status still used).
-    * HEC audit skipped (decisions still logged to stdout).
-* When Splunk credentials are added later, those features light up
-  without code changes.
+```toml
+[llm]
+transport = "splunk_ai"
 
-## Setup checklist (Plan B)
+[llm.splunk_ai]
+provider = "splunk_hosted"      # AITK provider name on a SLIM account
+model    = "gpt-oss-20b"        # or "gpt-oss-120b" or "Foundation-Sec-1.1-8B-Instruct"
+```
 
-1. **Install Ollama.** <https://ollama.com/download> — Windows
-   installer, ~200 MB.
-2. **Pull the model.** `ollama pull qwen2.5:3b` (1.9 GB on disk,
-   ~3 GB RAM at runtime — fits comfortably in 6–8 GB total system
-   RAM). See the model-selection table above for lower- and
-   higher-RAM alternatives.
-3. **Sanity-check Ollama.** `ollama run qwen2.5:3b "say hello"` →
-   should reply.
-4. **Run the agent.**
-
-   ```powershell
-   cd agent
-   pip install -e .
-   Copy-Item configs\aegis-ops.example.toml configs\aegis-ops.toml
-   aegis-ops run --config configs\aegis-ops.toml --once -v
-   ```
-
-5. **(Optional) wire Splunk.** Paste a Splunk auth token into
-   `[splunk]` and a HEC token into `[audit]` to light up SPL
-   observations and audit. The `[llm]` block stays on Ollama.
+No code changes, no redeployment, no UI changes. Same prompt, same
+decision schema, same audit trail — only `provider` differs from the
+`aitk_ollama` shape.
 
 ## Effect on Splunk AI Assistant 2.0 integration
 
-SAIA 2.0 uses the same SLIM infrastructure as the `| ai` command.
-On a trial account where SLIM is gated, SAIA cannot answer
-generative-AI prompts either.
+SAIA 2.0 uses the same SLIM infrastructure as the `| ai` command
+*when configured against `splunk_hosted`*. On a trial account where
+SLIM is gated, SAIA cannot answer generative-AI prompts either.
 
 What still works in the trial:
 
@@ -154,46 +162,31 @@ What still works in the trial:
 * Any SPL search against `index=aegis sourcetype=aegis:agent` —
   including the recommended operator workflow in
   [`docs/saia-integration.md`](saia-integration.md).
+* The new Aegis-AI custom alert action and `| aegisreason` custom
+  search command from `apps/aegis_ai/` — these don't depend on SAIA
+  at all; they use `splunklib.ai.Agent` directly.
 
 What doesn't:
 
 * SAIA replying in natural language about Aegis audit events.
 
-The documented SAIA pairing is therefore "best-effort, degraded on
-trial accounts, full-featured on provisioned Splunk Cloud". The
-Aegis-side integration code is unchanged.
-
-## Restoring Plan A (when SLIM access lands)
-
-```toml
-# agent/configs/aegis-ops.toml
-[llm]
-transport = "splunk_ai"
-
-[splunk]
-url   = "https://prd-p-XXXXX.splunkcloud.com"
-token = "paste-search-token-here"
-```
-
-That's it. No code edits, no redeployment of the sidecar, no UI
-change. The same prompt, the same decision schema, the same audit
-trail — only the transport differs.
-
 ## What this means for the submission
 
-The hackathon's published Hosted Models prize text says:
+The hackathon's Hosted Models prize text says:
 
 > Build solutions that use Splunk Hosted Models such as gpt-oss-20b,
 > gpt-oss-120b, or Foundation-Sec-1.1-8B-Instruct.
 
 Aegis ships **a working, tested integration with the `| ai` SPL
-transport** (`transports.SplunkAITransport`, `sidecar/splunk_ai.py`,
-12 transport tests passing) that is one config flag away from
-production. It is hibernated only because the provisioned environment
-to run it against does not exist on a 14-day trial.
+transport** (`SplunkAITransport`, `sidecar/splunk_ai.py`) **and**
+exercises that transport *live* via the `aitk_ollama` shape (AITK
+Connection Management → Ollama → `gpt-oss:20b`). The pure
+SLIM-backed path is hibernated only because the provisioned
+environment to run it against does not exist on a 14-day trial — but
+the SPL `| ai` surface, the AITK Connection Management UI, and the
+`gpt-oss:20b` model identifier are **all exercised in the demo**.
 
 That is materially different from "we never integrated Hosted
-Models". We integrated them, demonstrated the integration in tests
-against a mocked Splunk SPL endpoint, and pivoted the runtime
-transport to a model with the same identifier so the demo is
-end-to-end functional today.
+Models". We integrated them, tested them against a mocked SLIM SPL
+endpoint, and we route through the same AITK `| ai` surface every
+day using a local Ollama instance hosting the same model identifier.

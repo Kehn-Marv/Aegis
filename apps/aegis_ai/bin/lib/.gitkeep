@@ -1,0 +1,4 @@
+# Drop any third-party Python dependencies (e.g. splunk-sdk[ai], pydantic)
+# into this folder if your Splunk install does not already bundle them.
+# At runtime, bin/aegis_severity_alert.py and bin/aegis_reason_csc.py
+# prepend this folder to sys.path so anything dropped in here is importable.

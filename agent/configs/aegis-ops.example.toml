@@ -2,13 +2,21 @@
 # Copy to `aegis-ops.toml` and (optionally) fill in Splunk + HEC creds.
 #
 # DEFAULT SHAPE (no Splunk credentials):
-#   - LLM:        local Ollama running qwen2.5:3b (~3 GB RAM)
+#   - LLM:        local Ollama running gpt-oss:20b (or smaller — see below)
 #   - Observe:    live gateway REST status only (SPL skipped)
 #   - Audit:      dry log to stdout (HEC skipped)
 #
-# This is the Plan B configuration documented in docs/splunk-blocker.md.
-# Flip [llm].transport = "splunk_ai" and fill [splunk] when SLIM API is
-# provisioned on your Splunk Cloud account.
+# THREE LIVE LLM TRANSPORTS are supported, picked by [llm].transport:
+#
+#   * "ollama"      — raw Ollama HTTP (default). Edge-first, no Splunk.
+#                     See docs/splunk-blocker.md.
+#   * "aitk_ollama" — Splunk AI Toolkit `| ai` SPL command, routed
+#                     through a user-defined AITK Ollama connection.
+#                     Works on Splunk Enterprise (Developer License) —
+#                     NO SLIM API required. See docs/aitk-ollama.md.
+#   * "splunk_ai"   — Splunk AI Toolkit `| ai` against Splunk-Hosted
+#                     Models (gpt-oss-20b / Foundation-Sec). Gated on
+#                     the 14-day Cloud trial — see docs/splunk-blocker.md.
 
 [agent]
 loop_interval_secs = 15
@@ -20,30 +28,64 @@ min_confidence = 0.6
 cooldown_secs = 120
 
 # ------------------------------------------------------------------
-# LLM transport: "ollama" (default) or "splunk_ai" (hibernated)
+# CDTSM forecast feedback loop (OPTIONAL).
+# Requires [splunk] url+token AND the Splunk AI Toolkit installed with
+# the Cisco Deep Time Series Model (Splunk Hosted) available. When
+# enabled, the observer runs the two SPL searches below every tick,
+# and if the forecast crosses a threshold, the LLM gets a "predictive
+# signal" hint in its prompt. See docs/cdtsm-forecast.md.
+# ------------------------------------------------------------------
+[observe]
+cdtsm_enabled                       = false
+cdtsm_horizon_minutes               = 15
+cdtsm_history_window                = "-2h"
+queue_forecast_breach_threshold     = 4096
+savings_forecast_drop_threshold_pct = 75.0
+
+# ------------------------------------------------------------------
+# LLM transport: "ollama" | "aitk_ollama" | "splunk_ai"
 # ------------------------------------------------------------------
 [llm]
 transport = "ollama"
 
 [llm.ollama]
-# Local Ollama server. Install: https://ollama.com/download
-# Pull the model first:  ollama pull qwen2.5:3b
+# Raw Ollama HTTP. Install: https://ollama.com/download
+# Pull the model first:  ollama pull gpt-oss:20b
 #
 # Model recommendations by available RAM (total system RAM):
-#   - 6-8 GB RAM   ->  "qwen2.5:3b"   (default; ~3 GB active; best JSON quality at this size)
+#   - 16 GB+ RAM   ->  "gpt-oss:20b"  (matches the Splunk Hosted Models name)
+#   - 6-8 GB RAM   ->  "qwen2.5:3b"   (~3 GB active; great JSON quality)
 #   - 4-6 GB RAM   ->  "gemma2:2b"    (~2 GB active; good quality)
 #   - <4 GB RAM    ->  "qwen2.5:1.5b" (~1.5 GB active; basic but functional)
-#   - 16 GB+ RAM   ->  "qwen2.5:7b"   (best quality if you have the headroom)
 url             = "http://127.0.0.1:11434"
-model           = "qwen2.5:3b"
+model           = "gpt-oss:20b"
 timeout_secs    = 60
 # Enforces a hard JSON schema on the model's reply via Ollama's
-# `format` parameter. Big reliability win for 3B models. Leave true.
+# `format` parameter. Big reliability win for small models. Leave true.
 enforce_schema  = true
 
+[llm.aitk_ollama]
+# Splunk AI Toolkit `| ai` SPL command, routed through a user-defined
+# AITK Ollama connection. Requires [splunk] url+token to be set.
+#
+# Setup (one-time, on Splunk Enterprise with AITK >= 5.6):
+#   1. Splunkbase -> Install "Splunk AI Toolkit".
+#   2. Splunk Web -> AITK app -> Connection Management -> New LLM Connection
+#       -> Type: Ollama
+#       -> Name: ollama_local          (must match `provider` below)
+#       -> Endpoint: http://127.0.0.1:11434
+#       -> Default model: gpt-oss:20b  (must match `model` below)
+#   3. Save.
+# See docs/aitk-ollama.md for screenshots and SPL verification.
+provider     = "ollama_local"
+model        = "gpt-oss:20b"
+timeout_secs = 30
+
 [llm.splunk_ai]
-# Hibernated. Requires Splunk SLIM API access (see docs/splunk-blocker.md).
-# All code paths preserved -- flip [llm].transport to "splunk_ai" to use.
+# Splunk-Hosted Models via the AI Toolkit `| ai` command (SLIM-backed).
+# Currently gated on the 14-day Splunk Cloud trial -- see docs/splunk-blocker.md.
+# When provisioned, set `provider = "splunk_hosted"` and `model =
+# "gpt-oss-20b" | "gpt-oss-120b" | "Foundation-Sec-1.1-8B-Instruct"`.
 provider     = "splunk_hosted"
 model        = "gpt-oss-20b"
 timeout_secs = 30
@@ -59,6 +101,24 @@ token      = ""
 verify_tls = true
 earliest   = "-5m"
 latest     = "now"
+
+# ------------------------------------------------------------------
+# Splunk MCP Server (OPTIONAL but recommended for hackathon judges).
+# When enabled, every observational SPL call from the agent flows
+# through MCP `tools/call` to either of:
+#   * Splunk Cloud Platform MCP Server v1.1+ (`splunk_run_query`)
+#   * Cisco-DevNet Splunk-MCP-Server-official (`run_splunk_query`)
+# Auto-detected via `tools/list`; override with `tool_name`.
+# Endpoint default for Splunk Cloud / Enterprise hosting the MCP app:
+#   https://<splunk-host>:8089/services/mcp
+# See: docs/mcp.md
+# ------------------------------------------------------------------
+[splunk.mcp]
+enabled      = false
+endpoint     = ""
+tool_name    = ""        # leave empty for auto-detect
+verify_tls   = true
+timeout_secs = 30
 
 # ------------------------------------------------------------------
 # Audit (OPTIONAL).

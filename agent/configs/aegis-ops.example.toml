@@ -1,62 +1,82 @@
 # AegisOps Agent configuration.
-# Copy to `aegis-ops.toml` and fill in secrets before running.
+# Copy to `aegis-ops.toml` and (optionally) fill in Splunk + HEC creds.
+#
+# DEFAULT SHAPE (no Splunk credentials):
+#   - LLM:        local Ollama running qwen2.5:3b (~3 GB RAM)
+#   - Observe:    live gateway REST status only (SPL skipped)
+#   - Audit:      dry log to stdout (HEC skipped)
+#
+# This is the Plan B configuration documented in docs/splunk-blocker.md.
+# Flip [llm].transport = "splunk_ai" and fill [splunk] when SLIM API is
+# provisioned on your Splunk Cloud account.
 
 [agent]
-# How often the observe -> reason -> act loop fires, per gateway.
 loop_interval_secs = 15
-# When true, the actuator never calls any gateway or HEC. Use for prompt
-# iteration without producing audit noise.
 dry_run = false
 
 [policy]
-# One of: "read_only", "low_risk_auto", "full_auto".
-#   read_only      - agent only observes and recommends, never actuates
-#   low_risk_auto  - auto-execute `diagnostic`, recommend `override`/`reset`
-#   full_auto      - auto-execute every decision the model returns
 mode = "low_risk_auto"
-# Confidence floor below which a decision is downgraded to a recommendation.
 min_confidence = 0.6
-# Per-tool cooldown - the same tool can fire at most once per N seconds per gateway.
 cooldown_secs = 120
 
-[splunk]
-# Splunk Cloud URL, no trailing slash, no /services/... suffix.
-url = "https://prd-p-XXXXX.splunkcloud.com"
-# Splunk auth token (NOT HEC). Generated at
-# Settings -> Tokens -> New Token. Needs `search` capability plus
-# `apply_ai_commander_command` (mltk_admin role).
-token = "PASTE-SPLUNK-AUTH-TOKEN-HERE"
-verify_tls = true
-# Default SPL time window for observational searches.
-earliest = "-5m"
-latest = "now"
+# ------------------------------------------------------------------
+# LLM transport: "ollama" (default) or "splunk_ai" (hibernated)
+# ------------------------------------------------------------------
+[llm]
+transport = "ollama"
 
-[hosted_model]
-# Provider name as configured in AI Toolkit -> Connection Management.
-# Use the exact label shown in your AITK UI; "splunk_hosted" is the
-# typical name for the Splunk Hosted (SLIM API) provider.
-provider = "splunk_hosted"
-# Model identifier. One of:
-#   gpt-oss-20b              (fast, cheap, recommended for triage)
-#   gpt-oss-120b             (better reasoning, slower)
-#   foundation-sec-1.1-8b-instruct
-model = "gpt-oss-20b"
-# Per-call timeout for the search-based inference.
+[llm.ollama]
+# Local Ollama server. Install: https://ollama.com/download
+# Pull the model first:  ollama pull qwen2.5:3b
+#
+# Model recommendations by available RAM (total system RAM):
+#   - 6-8 GB RAM   ->  "qwen2.5:3b"   (default; ~3 GB active; best JSON quality at this size)
+#   - 4-6 GB RAM   ->  "gemma2:2b"    (~2 GB active; good quality)
+#   - <4 GB RAM    ->  "qwen2.5:1.5b" (~1.5 GB active; basic but functional)
+#   - 16 GB+ RAM   ->  "qwen2.5:7b"   (best quality if you have the headroom)
+url             = "http://127.0.0.1:11434"
+model           = "qwen2.5:3b"
+timeout_secs    = 60
+# Enforces a hard JSON schema on the model's reply via Ollama's
+# `format` parameter. Big reliability win for 3B models. Leave true.
+enforce_schema  = true
+
+[llm.splunk_ai]
+# Hibernated. Requires Splunk SLIM API access (see docs/splunk-blocker.md).
+# All code paths preserved -- flip [llm].transport to "splunk_ai" to use.
+provider     = "splunk_hosted"
+model        = "gpt-oss-20b"
 timeout_secs = 30
 
+# ------------------------------------------------------------------
+# Splunk observability (OPTIONAL).
+# Leave url+token empty to skip SPL observations entirely. The agent
+# will still observe live gateway state and produce reasoned decisions.
+# ------------------------------------------------------------------
+[splunk]
+url        = ""
+token      = ""
+verify_tls = true
+earliest   = "-5m"
+latest     = "now"
+
+# ------------------------------------------------------------------
+# Audit (OPTIONAL).
+# Leave hec_endpoint+hec_token empty to skip HEC; the agent will still
+# log every decision to stdout for inspection.
+# ------------------------------------------------------------------
 [audit]
-# HEC endpoint the agent ships decision records to.
-# Same HEC the Aegis gateways use is fine.
-hec_endpoint = "https://localhost:8088/services/collector/event"
-hec_token    = "PASTE-HEC-TOKEN-HERE"
-hec_index    = "aegis"
-hec_source   = "aegis:agent"
+hec_endpoint   = ""
+hec_token      = ""
+hec_index      = "aegis"
+hec_source     = "aegis:agent"
 hec_sourcetype = "aegis:agent"
-verify_tls   = false
+verify_tls     = false
 
+# ------------------------------------------------------------------
 # One [[gateways]] block per Aegis edge to monitor.
-# The demo defaults are 7321 and 7322 representing two regions on this host.
-
+# Defaults: two regions on this host (use demo/run-multi-edge.ps1).
+# ------------------------------------------------------------------
 [[gateways]]
 name = "us-east"
 url  = "http://127.0.0.1:7321"

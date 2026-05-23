@@ -3,6 +3,14 @@
 > How Aegis complements Splunk AI Assistant 2.0 (SAIA) in the
 > Agentic Ops Hackathon context.
 
+> **Trial-account caveat.** SAIA's generative replies depend on the
+> same SLIM API that gates Splunk Hosted Models. On the 14-day Splunk
+> Cloud trial, SAIA can still issue SPL searches on the operator's
+> behalf, but cannot produce natural-language answers. See
+> [`splunk-blocker.md`](splunk-blocker.md) for the full story. The
+> Aegis-side integration below is unchanged and will light up when
+> the account is provisioned.
+
 ## What SAIA is
 
 Splunk AI Assistant 2.0 is a **conversational agent inside Splunk Web**.

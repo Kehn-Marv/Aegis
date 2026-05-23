@@ -11,13 +11,14 @@ import typer
 
 from .actuator import Actuator
 from .auditor import Auditor
-from .config import AegisOpsCfg
+from .config import AegisOpsCfg, LLMCfg
 from .gateway_client import GatewayClient
-from .models import DecisionRecord
+from .models import Decision, DecisionRecord
 from .observer import Observer
 from .policy import PolicyEngine
 from .reasoner import Reasoner
 from .splunk_client import SplunkClient
+from .transports import LLMTransport, OllamaTransport, SplunkAITransport
 
 log = logging.getLogger("aegis_ops")
 app = typer.Typer(help="Autonomous AI agent for Aegis edge gateways.")
@@ -43,7 +44,7 @@ def run(
     ),
     verbose: bool = typer.Option(False, "--verbose", "-v"),
 ) -> None:
-    """Run the observe → reason → act loop."""
+    """Run the observe -> reason -> act loop."""
     logging.basicConfig(
         level=logging.DEBUG if verbose else logging.INFO,
         format="%(asctime)s %(levelname)-5s %(name)s %(message)s",
@@ -54,39 +55,39 @@ def run(
 
 
 async def _main_loop(cfg: AegisOpsCfg, *, dry_run: bool, once: bool) -> None:
-    splunk = SplunkClient(
-        url=cfg.splunk.url,
-        token=cfg.splunk.token,
-        verify_tls=cfg.splunk.verify_tls,
-    )
+    splunk: SplunkClient | None = None
+    if cfg.splunk.enabled:
+        splunk = SplunkClient(
+            url=cfg.splunk.url,
+            token=cfg.splunk.token,
+            verify_tls=cfg.splunk.verify_tls,
+        )
+
+    transport = _build_transport(cfg.llm, splunk)
+
     observer = Observer(
         splunk=splunk,
         earliest=cfg.splunk.earliest,
         latest=cfg.splunk.latest,
     )
-    reasoner = Reasoner(
-        splunk=splunk,
-        provider=cfg.hosted_model.provider,
-        model=cfg.hosted_model.model,
-    )
+    reasoner = Reasoner(transport=transport)
     policy = PolicyEngine(
         mode=cfg.policy.mode,
         min_confidence=cfg.policy.min_confidence,
         cooldown_secs=cfg.policy.cooldown_secs,
     )
     actuator = Actuator(dry_run=dry_run)
-    auditor = Auditor(cfg.audit, dry_run=dry_run)
-    gateways = {
-        gw.name: GatewayClient(gw.url) for gw in cfg.gateways
-    }
+    auditor = Auditor(cfg.audit, dry_run=dry_run or not cfg.audit.enabled)
+    gateways = {gw.name: GatewayClient(gw.url) for gw in cfg.gateways}
 
     log.info(
-        "AegisOps starting: %d gateway(s), policy=%s, dry_run=%s, model=%s/%s",
+        "AegisOps starting: %d gateway(s), policy=%s, dry_run=%s, llm=%s, splunk=%s, audit=%s",
         len(gateways),
         cfg.policy.mode,
         dry_run,
-        cfg.hosted_model.provider,
-        cfg.hosted_model.model,
+        transport.name,
+        "on" if cfg.splunk.enabled else "off",
+        "on" if cfg.audit.enabled and not dry_run else "off",
     )
 
     try:
@@ -115,8 +116,35 @@ async def _main_loop(cfg: AegisOpsCfg, *, dry_run: bool, once: bool) -> None:
     finally:
         for c in gateways.values():
             await c.close()
-        await splunk.close()
+        await transport.close()
+        if splunk is not None:
+            await splunk.close()
         await auditor.close()
+
+
+def _build_transport(cfg: LLMCfg, splunk: SplunkClient | None) -> LLMTransport:
+    if cfg.transport == "ollama":
+        # Enforce the Decision JSON schema at decode time so even
+        # small 3B models like qwen2.5:3b can't emit malformed JSON.
+        schema = Decision.model_json_schema() if cfg.ollama.enforce_schema else None
+        return OllamaTransport(
+            url=cfg.ollama.url,
+            model=cfg.ollama.model,
+            timeout_secs=cfg.ollama.timeout_secs,
+            format_schema=schema,
+        )
+    if cfg.transport == "splunk_ai":
+        if splunk is None:
+            raise RuntimeError(
+                "llm.transport='splunk_ai' requires [splunk] url+token to be set. "
+                "See docs/splunk-blocker.md for the current trial-environment caveat."
+            )
+        return SplunkAITransport(
+            splunk=splunk,
+            provider=cfg.splunk_ai.provider,
+            model=cfg.splunk_ai.model,
+        )
+    raise ValueError(f"unknown llm.transport: {cfg.transport!r}")
 
 
 async def _tick_one(

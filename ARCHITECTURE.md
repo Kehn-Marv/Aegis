@@ -39,6 +39,7 @@ flowchart LR
 
     AGENT["External AI Agent<br/>Cursor / Claude Desktop"]
     OPS["AegisOps Agent<br/>observe &rarr; reason &rarr; act"]
+    OLLAMA["Local Ollama<br/>qwen2.5:3b<br/>(default LLM, JSON-schema enforced)"]
 
     APP -->|raw stream| ING
     ING --> CORE
@@ -54,19 +55,20 @@ flowchart LR
     AGENT <-->|MCP| SMCP
     AGENT <-->|MCP| MCPSRV
     OPS -->|REST /api/*| MCPSRV
-    OPS -->|SPL + &#124; ai| HOSTED
+    OPS -->|reason: default| OLLAMA
+    OPS -.->|reason: hibernated<br/>&#124; ai SPL| HOSTED
     OPS -->|audit HEC| HEC
     OPS -->|observational SPL| INDEX
     MCPSRV -.->|live Arc&lt;Control&gt;| CORE
     MCPSRV -.->|reset / clear| QUEUE
     SMCP --> INDEX
     SAIA <--> HOSTED
-    SIDECAR -.->|&#124; ai classify| HOSTED
+    SIDECAR -.->|&#124; ai classify<br/>(hibernated)| HOSTED
 
     classDef edge fill:#0b3d2e,stroke:#3ddc97,color:#fff
     classDef splunk fill:#1a1a3e,stroke:#7c5cff,color:#fff
     classDef agent fill:#3d2a0b,stroke:#ffb86b,color:#fff
-    class APP,ING,CORE,QUEUE,SINK,SELFM,MCPSRV,SIDECAR,UI edge
+    class APP,ING,CORE,QUEUE,SINK,SELFM,MCPSRV,SIDECAR,UI,OLLAMA edge
     class HEC,INDEX,DASH,SMCP,SAIA,HOSTED splunk
     class AGENT,OPS agent
 ```
@@ -90,7 +92,7 @@ and switches to raw passthrough — a real agentic loop, not a fake.
 |-------------------|-------------------|----------------|
 | **HTTP Event Collector (HEC)** | Primary egress path. Four sourcetypes: `aegis:raw`, `aegis:metric`, `aegis:selfmetric`, `aegis:diagnostic` | Best of Observability |
 | **MCP Server (Splunkbase, v1.1.3)** | Aegis ships a *complementary* MCP server. The demo orchestrates Cursor / Claude Desktop talking to *both* MCP servers in one chat session | Best Use of Splunk MCP Server |
-| **Hosted Models** (`gpt-oss-20b`, `Foundation-Sec-1.1-8B`) | Sidecar classifies via SPL `| ai`; AegisOps agent reasons via the same transport. Both fall back to local embeddings / safe noop when Splunk is unreachable | Best Use of Splunk Hosted Models |
+| **Hosted Models** (`gpt-oss-20b`, `Foundation-Sec-1.1-8B`) | Sidecar classifies via SPL `| ai`; AegisOps agent reasons via the same transport (`transports.SplunkAITransport`). Currently **hibernated** because the 14-day Splunk Cloud trial does not provision SLIM API — see [`docs/splunk-blocker.md`](docs/splunk-blocker.md). Default transport is local Ollama running the same `gpt-oss:20b` model id. Both paths are tested; flipping the config restores the Splunk transport with no code change | Best Use of Splunk Hosted Models |
 | **AI Assistant 2.0** | No programmatic API today. Documented pairing: operator asks SAIA to explain `sourcetype=aegis:agent` audit events the autonomous agent produced | Best of Observability |
 | **Dashboard Studio** | [`dashboards/aegis.json`](dashboards/aegis.json) ships 9 panels covering dedup savings, top suppressed signatures, classifier verdict, classifier-strategy breakdown, and first-occurrence rate | Best of Observability |
 
@@ -121,8 +123,9 @@ and switches to raw passthrough — a real agentic loop, not a fake.
   over streamable HTTP. Five tools: `status`, `reset`, `diagnostic`,
   `override`, `replay_raw`.
 * **AegisOps Agent** → polls each gateway's REST API, runs observational
-  SPL against Splunk, calls Hosted Models via `| ai`, actuates via
-  `POST /api/command`, audits to `sourcetype=aegis:agent`.
+  SPL against Splunk (optional), calls its configured **LLM transport**
+  (`ollama` default, `splunk_ai` hibernated), actuates via
+  `POST /api/command`, audits to `sourcetype=aegis:agent` (optional).
 * Both control planes mutate the **same `Arc<Control>`** the data plane
   reads on its hot path — verified end-to-end during development (the
   README walks through the smoke test).
@@ -146,7 +149,7 @@ and switches to raw passthrough — a real agentic loop, not a fake.
 |   `-- aegis_sidecar/      embeddings, clustering, classifier, splunk_ai adapter
 |-- agent/                  AegisOps autonomous agent (observe → reason → act)
 |   |-- pyproject.toml      Agent dependencies and CLI entry point
-|   `-- aegis_ops/          observer, reasoner, policy, actuator, auditor
+|   `-- aegis_ops/          observer, reasoner, transports (Ollama + Splunk |ai), policy, actuator, auditor
 |-- ui/                     React 19 + Vite 7 + Tailwind v4 control panel
 |   |-- package.json        Node dependencies + scripts
 |   `-- src/                components + REST client

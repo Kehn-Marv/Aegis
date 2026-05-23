@@ -1,12 +1,13 @@
 """Observer: builds a per-gateway `Observation` each tick.
 
-Combines two sources:
-  * **Live gateway state** via the Aegis REST API.
-  * **Splunk-derived signals** via SPL queries against `index=aegis` —
-    top signatures, classifier verdict counts, rolling trends.
+Two data sources:
 
-The observer also keeps a small in-memory history per gateway so it
-can compute trends (events_in/min, queue growth, etc.) between ticks.
+* **Live gateway state** via the Aegis REST API (always available).
+* **Splunk-derived signals** via SPL queries against `index=aegis`
+  (optional — skipped gracefully when Splunk credentials are absent).
+
+The observer keeps a small in-memory history per gateway so it can
+compute rolling trends and a `trajectory` label between ticks.
 """
 
 from __future__ import annotations
@@ -17,7 +18,7 @@ from collections import deque
 from dataclasses import dataclass, field
 
 from .gateway_client import GatewayClient
-from .models import GatewayStatus, Observation, TopSignature, Trends, TrajectoryLabel
+from .models import GatewayStatus, Observation, TopSignature, TrajectoryLabel, Trends
 from .splunk_client import SplunkClient
 
 log = logging.getLogger("aegis_ops.observer")
@@ -37,7 +38,6 @@ class _GatewayHistory:
     def trend_window(self, now: float) -> tuple[float | None, GatewayStatus | None]:
         if not self.samples:
             return (None, None)
-        # Find sample closest to one minute ago.
         target = now - 60.0
         prev_ts, prev_status = self.samples[0]
         for ts, status in self.samples:
@@ -51,7 +51,7 @@ class _GatewayHistory:
 class Observer:
     def __init__(
         self,
-        splunk: SplunkClient,
+        splunk: SplunkClient | None,
         earliest: str = "-5m",
         latest: str = "now",
     ):
@@ -66,23 +66,25 @@ class Observer:
         now = time.time()
         hist.push(now, status)
 
-        # SPL signals are best-effort: if Splunk is unreachable or empty,
-        # the observation is still well-formed (notes captures the reason).
         notes: list[str] = []
         top_sigs: list[TopSignature] = []
         anomaly_count = 0
         routine_count = 0
         unknown_count = 0
-        try:
-            top_sigs = await self._top_signatures(gateway_name)
-        except Exception as exc:
-            notes.append(f"top_signatures_unavailable: {exc}")
-        try:
-            anomaly_count, routine_count, unknown_count = await self._classifier_counts(
-                gateway_name
-            )
-        except Exception as exc:
-            notes.append(f"classifier_counts_unavailable: {exc}")
+
+        if self.splunk is None:
+            notes.append("splunk_disabled: running without SPL observations")
+        else:
+            try:
+                top_sigs = await self._top_signatures(gateway_name)
+            except Exception as exc:
+                notes.append(f"top_signatures_unavailable: {exc}")
+            try:
+                anomaly_count, routine_count, unknown_count = await self._classifier_counts(
+                    gateway_name
+                )
+            except Exception as exc:
+                notes.append(f"classifier_counts_unavailable: {exc}")
 
         trends = self._compute_trends(hist, now, status, anomaly_count)
 
@@ -98,11 +100,8 @@ class Observer:
             notes=notes,
         )
 
-    # ------------------------------------------------------------------
-    # SPL builders
-    # ------------------------------------------------------------------
-
     async def _top_signatures(self, gateway_name: str) -> list[TopSignature]:
+        assert self.splunk is not None
         spl = (
             f'search index=aegis sourcetype=aegis:metric host={gateway_name} '
             f'| stats sum(count) AS suppressed, values(sample) AS sample, '
@@ -144,6 +143,7 @@ class Observer:
         return out
 
     async def _classifier_counts(self, gateway_name: str) -> tuple[int, int, int]:
+        assert self.splunk is not None
         spl = (
             f'search index=aegis sourcetype=aegis:metric host={gateway_name} '
             f'"classification.label"=* '

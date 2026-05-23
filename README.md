@@ -144,23 +144,20 @@ There are three setup paths depending on what you want to see:
 
 * **Path A — Demo mode** — runs without Splunk. Best for understanding
   what the gateway does. **~5 minutes**, only needs Rust + Python 3.
-* **Path B — Live mode (real Splunk)** — wires Aegis into a Splunk
-  Enterprise instance with HEC + the Aegis AI Splunk app + the AITK
-  `| ai` SPL command. Best for the actual production use case and for
-  the agentic / dashboard demos. **~30 minutes** if you also have to
-  install Splunk. See also
-  [`docs/aitk-ollama.md`](docs/aitk-ollama.md) for the AITK + Ollama
-  setup and [`apps/aegis_ai/README.md`](apps/aegis_ai/README.md) for
-  the `splunklib.ai` app.
-* **Path C — Full stack (multi-edge + AegisOps Agent)** — two regional
-  gateways plus the autonomous agent loop, optionally with the
-  CDTSM forecast loop and MCP-routed observations. Requires Path B
-  credentials (Splunk auth token + HEC). See
-  [Path C](#path-c--full-stack-multi-edge--aegisops-agent).
+* **Path B — Live mode (real Splunk)** — single edge gateway wired into
+  Splunk Enterprise: HEC ingest, AI sidecar classification, AITK/CDTSM
+  forecast panels, and the full 11-panel dashboard. **~45 minutes**
+  if you also have to install Splunk + AITK. This is the **complete
+  demo** — every panel populates when you finish.
+* **Path C — Full stack (multi-edge + AegisOps Agent)** — builds on
+  Path B: two regional gateways plus the autonomous agent loop that
+  observes, reasons (Ollama), and actuates. **Do Path B first**, then
+  continue into C without shutting Splunk down. See
+  [Path B vs Path C](#path-b-vs-path-c--which-one-do-i-need).
 
-Both paths share the same prerequisites below. Add Splunk + an HEC
-token for Path B. Add Node and/or Python sidecar packages for the
-optional overlays in either path.
+Path A shares the Rust/Python prerequisites below. Path B adds Splunk,
+HEC, the AI sidecar, and Splunk AI Toolkit. Path C adds Ollama and the
+AegisOps agent on top of a completed Path B.
 
 ## Prerequisites (both paths)
 
@@ -302,12 +299,12 @@ to their LLMs.
 
 ---
 
-## Path B — Live mode (with Splunk Enterprise, ~30 minutes)
+## Path B — Live mode (with Splunk Enterprise, ~45 minutes)
 
-This path runs Aegis against a real Splunk Enterprise instance. You'll
-see real `sourcetype=aegis:metric` events land in Splunk, the
-self-metrics dashboard fill in, and (optionally) the AI classifier tag
-each event.
+This path runs the **full Aegis stack** against real Splunk Enterprise:
+HEC ingest, AI sidecar classification, CDTSM forecast panels, and the
+complete 11-panel dashboard. Every AI feature is wired into the setup
+flow — nothing is left as an optional overlay.
 
 ### B1. Get Splunk Enterprise + HEC token
 
@@ -369,11 +366,17 @@ cargo run --bin aegis-daemon -- --check-hec
 # INFO HEC ping accepted; check your Splunk for sourcetype=aegis:diagnostic
 ```
 
-In Splunk Web, search:
+In Splunk Web (`http://localhost:8000`):
+
+1. From the home page, open the **Search & Reporting** app (default
+   app; dark/green tile on the left).
+2. In the search bar at the top, run:
 
 ```spl
 index=aegis sourcetype=aegis:diagnostic
 ```
+
+3. Set the time range to *Last 24 hours* (or wider) and click **Search**.
 
 You should see one event with `kind=startup_ping`. If you don't:
 
@@ -382,26 +385,234 @@ You should see one event with `kind=startup_ping`. If you don't:
   the URL ends with `/services/collector/event`.
 * Self-signed cert error → set `verify_tls = false` in the config.
 
-### B4. Run the live pipeline
+### B3.5 Install the AI sidecar (required — powers classifier panels)
+
+The sidecar adds `classification.label` and `classification.strategy`
+to every collapsed metric event. Without it, the **AI classifier
+verdict** and **Classifier strategy used** dashboard panels stay empty.
+
+One-time install:
 
 ```powershell
-# Terminal 1 — Aegis daemon
+cd sidecar
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1
+# PyTorch (~123 MB) often fails mid-download from PyPI on Windows.
+# Install it from the official CPU wheel index first, then the rest:
+pip install torch --index-url https://download.pytorch.org/whl/cpu
+pip install -e .
+```
+
+[`configs/aegis.toml`](configs/aegis.example.toml) already ships with
+`[sidecar] enabled = true` — no config edit needed. You will start the
+sidecar in **B4 Terminal 1** and leave it running.
+
+> **First-call note:** the sidecar lazy-downloads
+> `sentence-transformers/all-MiniLM-L6-v2` (~80 MB) on the first
+> `/classify` request. If the machine is offline it falls back to a
+> deterministic hash-based embedding so the API stays functional.
+
+> **`win_amd64` on the PyTorch wheel?** That name means 64-bit Windows
+> on x86-64 (Intel **or** AMD). It is the correct wheel for almost all
+> modern Windows laptops — it does not require an AMD processor.
+
+Verify the sidecar started:
+
+```powershell
+# Expect: Uvicorn running on http://127.0.0.1:8765
+python -m aegis_sidecar.server
+```
+
+Leave that terminal open.
+
+### B3.6 Install Splunk AI Toolkit (required — powers CDTSM forecast panels)
+
+The two bottom dashboard panels (`Queue depth — 15-min forecast` and
+`Dedup savings % — 15-min forecast`) use Splunk's `| apply CDTSM`
+command. Without AI Toolkit installed you will see
+`Unknown search command 'apply'`.
+
+**Splunkbase** is just Splunk's app store. You do not open a separate
+website — in Splunk Web go to **Apps → Find More Apps** and you land on
+**Browse More Apps** (the page with the search box on the left and app
+tiles in the middle).
+
+Install two apps from that page, **one at a time**, restarting Splunk
+after each:
+
+#### App 1 — Python for Scientific Computing
+
+> **Pick the Windows one.** You need **Python for Scientific Computing
+> (for Windows 64-bit)** — not Linux, Mac Intel, or Mac Apple Silicon.
+
+1. Splunk Web → top-left **Apps** dropdown → **Find More Apps**.
+2. In the left sidebar search box (*Find apps by keyword…*), type:
+   `Python for Scientific Computing`
+3. Click **Python for Scientific Computing (for Windows 64-bit)** →
+   green **Install**.
+4. Follow the prompts → when it asks to restart, **restart Splunk**.
+
+**If Install fails with `Winsock error 10054` or `Connection reset`:**
+the package is very large and Splunk's built-in downloader often drops
+the connection. Use the manual path instead:
+
+1. In your **browser** (Chrome/Edge), open
+   [Python for Scientific Computing — Windows 64-bit](https://splunkbase.splunk.com/app/2883)
+   (log in with the same Splunk account if prompted).
+2. Click **Download** and save the `.spl` or `.tgz` file to your
+   Downloads folder. Wait for the full download to finish in the
+   browser — do not interrupt it.
+3. Back in Splunk Web → **Apps** (left sidebar) → **Manage Apps**.
+4. Click **Install app from file** → **Choose File** → select the
+   file you downloaded → **Upload**.
+5. Restart Splunk when prompted (~1–2 minutes).
+
+#### App 2 — Splunk AI Toolkit
+
+1. Install PSC (App 1) first — AITK depends on it.
+2. Either use **Find More Apps** → search `Splunk AI Toolkit` →
+   **Install**, **or** if that also fails with a network error:
+   - Download from
+     [Splunk AI Toolkit on Splunkbase](https://splunkbase.splunk.com/app/2890)
+   - **Apps → Manage Apps → Install app from file → Upload**
+3. Restart Splunk when prompted.
+
+#### Smoke-test AITK loaded
+
+In **Search & Reporting**, paste into the search bar and click
+**Search**:
+
+```spl
+| makeresults
+| eval prompt="Reply with the single word pong."
+| ai prompt=prompt
+```
+
+You should get back a row within a few seconds. If you see
+`Unknown search command 'ai'`, AITK is not installed or Splunk needs
+another restart.
+
+The CDTSM forecast lines themselves need ~15 minutes of
+`sourcetype=aegis:selfmetric` data (generated in B4) before they draw
+a meaningful plot. See [`docs/cdtsm-forecast.md`](docs/cdtsm-forecast.md)
+and [`docs/aitk-ollama.md`](docs/aitk-ollama.md) for deeper AITK wiring.
+
+### B4. Run the live pipeline
+
+You need **three terminals** open at the same time while traffic flows.
+All three must be running **before** you start the log spammer.
+
+| Terminal | Command | How to know it's up |
+|---|---|---|
+| **1 — Sidecar** | `python -m aegis_sidecar.server` | `Uvicorn running on http://127.0.0.1:8765` |
+| **2 — Daemon** | `cargo run --release --bin aegis-daemon` | `tcp ingest listening`, `HEC configured`, `Control API at 127.0.0.1:7321/api/status` |
+| **3 — Spammer** | `python demo\log_spammer.py ...` | Runs silently for 60s, then exits (normal) |
+
+```powershell
+# Terminal 1 — AI sidecar (start first; leave running)
+cd sidecar
+.\.venv\Scripts\Activate.ps1
+python -m aegis_sidecar.server
+# logs: Uvicorn running on http://127.0.0.1:8765
+
+# Terminal 2 — Aegis daemon (leave running; repo root)
 cargo run --release --bin aegis-daemon
-# logs:  HEC configured; using queue-backed sink
+# logs:  AI sidecar enabled url=http://127.0.0.1:8765
+#        HEC configured; using queue-backed sink
 #        MCP HTTP listening at 127.0.0.1:7321/mcp
 #        Control API at 127.0.0.1:7321/api/status
 
-# Terminal 2 — log spammer (sustained traffic for a minute)
+# Terminal 3 — log spammer (repo root; one-shot — runs 60s then exits)
 python demo\log_spammer.py --target tcp://127.0.0.1:5140 --pattern crashloop --rate 200 --duration 60
 ```
 
-In Splunk you'll start seeing:
+#### B4a. Check the daemon is up (before running the spammer)
 
-* `sourcetype=aegis:raw` — first-occurrence raw lines (one per stack frame)
-* `sourcetype=aegis:metric` — dedup collapses (one per signature per window)
-* `sourcetype=aegis:selfmetric` — gateway perf snapshots every 15s
+Open a **fourth** PowerShell window (or use Terminal 3 before the
+spammer) and run:
 
-Sanity SPL to confirm:
+```powershell
+Invoke-RestMethod http://127.0.0.1:7321/api/status
+```
+
+* **JSON comes back** (`online`, `events_in`, `dedup_savings_pct`, …)
+  → daemon is running. Proceed to the spammer in Terminal 3.
+* **"Unable to connect" / connection refused** → start Terminal 2
+  (`cargo run --release --bin aegis-daemon`) and wait for the ingest /
+  HEC log lines, then retry.
+
+#### B4b. After the spammer finishes
+
+1. Keep **Terminals 1 and 2** open — do not close the sidecar or daemon.
+2. Wait **~60 seconds** so dedup metric windows flush and CDTSM panels
+   accumulate selfmetric history.
+3. Confirm classifications landed (sidecar must have been running
+   **during** the spammer — it only tags **new** traffic; old Splunk
+   events from before B3.5 will not have `classification.*` fields):
+
+```spl
+index=aegis sourcetype=aegis:metric "classification.label"=*
+```
+
+Set time range to *Last 15 minutes* in **Search & Reporting**. You
+should see metric events with `classification.label` and
+`classification.strategy`. Then refresh the dashboard — the **AI
+classifier verdict** and **Classifier strategy used** panels should
+populate.
+
+**Already ran the spammer before starting the sidecar?** Leave
+Terminals 1 and 2 running and re-run Terminal 3's spammer command once
+both services are up, then wait 60s and search again.
+
+### B4c. Search for the events in Splunk
+
+The sourcetypes below are **labels on events**, not commands to run in
+your terminal. You find them by typing an SPL query into Splunk's search
+bar and clicking **Search**.
+
+In Splunk Web (`http://localhost:8000`), open **Search & Reporting**
+(default app; dark/green tile on the left), then:
+
+1. Paste this into the search bar and click **Search**:
+
+```spl
+index=aegis
+```
+
+2. Set the time range to *Last 15 minutes* (or *Last 1 hour* if the
+   daemon has been up longer).
+
+You should see events. The landing page with an empty search bar shows
+nothing until you run a query like the one above.
+
+To filter by event type, run these one at a time in the same search
+bar (not in PowerShell):
+
+```spl
+index=aegis sourcetype=aegis:raw
+```
+
+```spl
+index=aegis sourcetype=aegis:metric
+```
+
+```spl
+index=aegis sourcetype=aegis:selfmetric
+```
+
+What each sourcetype means:
+
+* `aegis:raw` — first-occurrence raw lines (one per stack frame)
+* `aegis:metric` — dedup collapses (one per signature per window)
+* `aegis:selfmetric` — gateway perf snapshots every 15s
+
+**Don't panic if you see very few events.** The `crashloop` pattern
+generates thousands of identical lines; Aegis collapses most of them.
+Seeing ~100 events while the daemon reports ~99% dedup savings is
+exactly the FinOps story.
+
+Sanity SPL to confirm dedup is working — paste into the search bar, set
+the time range to *Last 15 minutes*, and click **Search**:
 
 ```spl
 index=aegis sourcetype=aegis:metric
@@ -413,29 +624,87 @@ that ratio *is* the FinOps story.
 
 ### B5. Import the dashboard
 
-1. In Splunk Web: *Dashboards → Create New Dashboard → Dashboard Studio*.
-2. Click the source-editor `{ }` icon and paste the contents of
-   [`dashboards/aegis.json`](dashboards/aegis.json) over the
-   placeholder.
-3. Save with whatever name you like. Set time range to *Last 15
-   minutes* and auto-refresh to 5s.
+In Splunk Web (`http://localhost:8000`):
+
+1. From the home page, click **Search & Reporting** in the left sidebar
+   (same app you used for B3/B4 searches).
+2. At the top of the page, open the **Dashboards** menu → **Create New
+   Dashboard**.
+   - Shortcut from the home page: under *Common Tasks*, the **Visualize
+     your data** tile also leads to dashboard creation.
+
+**On the *Create New Dashboard* dialog:**
+
+3. **Dashboard Title** — type `Aegis` (required).
+4. **Description** — optional; leave blank or e.g. `Aegis edge gateway`.
+5. **Permissions** — leave as *Private* (fine for local dev).
+6. Select **Dashboard Studio** (not Classic Dashboards).
+7. **Select layout mode** — choose **Absolute** (`aegis.json` uses
+   absolute layout; Grid will misalign the panels).
+8. Click the green **Create** button.
+
+**In the Dashboard Studio editor:**
+
+9. In the toolbar above the canvas, click the **Terminal** icon — `{ }`
+   on a document, immediately to the **left of the `?` help icon**.
+10. Select all placeholder JSON, delete it, and paste the full contents
+    of [`dashboards/aegis.json`](dashboards/aegis.json).
+11. Click **Apply and close** (green button, top-right of the terminal
+    editor). Back on the canvas, click **Save** (top-right) to persist
+    the dashboard.
+
+**View the dashboard:**
+
+12. Open the saved dashboard. Set the time range to *Last 15 minutes*
+    and auto-refresh to 5s so panels populate while the pipeline runs.
+13. Keep **Terminals 1 and 2** (sidecar + daemon) running — panels read
+    live data from `index=aegis` and stay empty if either service stops.
+
+**All 11 panels should populate** when B3.5–B4 were followed:
+
+| Panel group | Powered by |
+|---|---|
+| Headline KPIs, ingest chart, top signatures, first-occurrence rate | B4 daemon + HEC (always) |
+| AI classifier verdict, Classifier strategy used | B3.5 sidecar (Terminal 1) |
+| CDTSM forecast lines (bottom two panels) | B3.6 AI Toolkit + ~15 min of selfmetric data |
 
 You now have live panels for dedup savings, top suppressed signatures,
-AI classifier verdict, classifier-strategy breakdown, and
-first-occurrence rate. See [`dashboards/README.md`](dashboards/README.md)
+AI classifier verdict, classifier-strategy breakdown, CDTSM forecasts,
+and first-occurrence rate. See [`dashboards/README.md`](dashboards/README.md)
 for an SPL crib sheet.
+
+---
+
+### Path B vs Path C — which one do I need?
+
+| | **Path B** | **Path C** |
+|---|---|---|
+| **What you get** | One edge gateway → Splunk → full 11-panel dashboard with AI classification + CDTSM forecasts | Everything in B **plus** two regional gateways and the autonomous AegisOps agent (observe → reason → act) |
+| **Splunk** | Required (install + HEC) | Reuses the same Splunk instance from B — **keep it running** |
+| **Sidecar + AITK** | Required (built into B3.5–B3.6) | Same — keep sidecar running; AITK already installed |
+| **Ollama** | Not required | **Required** — the agent uses it for reasoning |
+| **Can I skip B and do C alone?** | — | **No** for the full demo. Complete **B1 through B5 first** so Splunk, HEC, sidecar, AITK, and the dashboard are all working. |
+| **Do I shut everything down between B and C?** | — | **No.** Leave Splunk Web running. Stop the single B4 daemon (`Ctrl+C` in Terminal 2) when you're ready for C2's two regional daemons — but keep the sidecar (Terminal 1) running and Splunk up. |
+
+**Typical flow:** finish Path B end-to-end → confirm the dashboard looks
+impressive → scroll down to Path C → install Ollama → swap the single
+daemon for two regional ones (C2) → start the AegisOps agent (C3).
 
 ---
 
 ## Path C — Full stack (multi-edge + AegisOps Agent)
 
+> **Start here only after Path B is complete (B1–B5).** Path C adds the
+> autonomous agent loop on top of the Splunk + sidecar + AITK foundation
+> you already built. Keep Splunk running; keep the sidecar running.
+
 This path demonstrates the **autonomous agent loop** — the centerpiece
 for the Observability track. Two regional gateways (`us-east`,
 `eu-west`) run in parallel; the AegisOps agent polls both, optionally
-queries Splunk for trends, **reasons with a local Ollama LLM
-(default) or Splunk Hosted Models when provisioned**, and actuates
-low-risk decisions (`diagnostic`) while logging everything to
-`sourcetype=aegis:agent`.
+queries Splunk for trends (including CDTSM forecasts), **reasons with a
+local Ollama LLM (default) or Splunk Hosted Models when provisioned**,
+and actuates low-risk decisions (`diagnostic`) while logging everything
+to `sourcetype=aegis:agent`.
 
 > **About the LLM transport.** The hackathon's Splunk Cloud 14-day
 > trial does not provision the SLIM API that Splunk Hosted Models run
@@ -444,13 +713,15 @@ low-risk decisions (`diagnostic`) while logging everything to
 > gateway. The Splunk `| ai` integration is preserved as a hibernated
 > transport — see [`docs/splunk-blocker.md`](docs/splunk-blocker.md).
 
-**Prerequisites:** Path B (HEC) is optional. Ollama is mandatory.
+**Prerequisites:** Path B complete (Splunk + HEC + sidecar + AITK +
+dashboard working). **Ollama is mandatory** for the agent.
 
 | Prerequisite | Where to get it |
 |--------------|-----------------|
+| **Path B complete** | [B1–B5 above](#path-b--live-mode-with-splunk-enterprise-45-minutes) — Splunk, HEC, sidecar, AITK, dashboard |
 | **Ollama** (mandatory) | <https://ollama.com/download>, then `ollama pull gpt-oss:20b` (~13 GB on disk, ~16 GB RAM — matches the `gpt-oss-20b` Splunk Hosted Models identifier). Smaller-RAM alternatives: `qwen2.5:7b` (~5 GB), `qwen2.5:3b` (~3 GB, explicitly tuned for JSON), `gemma2:2b` (~2 GB), `qwen2.5:1.5b` (~1.5 GB). Set the picked model in `[llm.ollama].model` |
-| Splunk auth token (optional, lights up SPL observations) | *Settings → Tokens → New Token* with `search` capability |
-| Splunk HEC token (optional, lights up agent audit trail) | *Settings → Data inputs → HTTP Event Collector* |
+| Splunk auth token (recommended — lights up SPL observations + CDTSM in agent) | *Settings → Tokens → New Token* with `search` capability |
+| Splunk HEC token | Already configured in Path B |
 | Splunk SLIM API (only for `[llm].transport="splunk_ai"`) | **Currently trial-gated.** See [`docs/splunk-blocker.md`](docs/splunk-blocker.md) |
 
 ### C1. Launch two gateways (demo without Splunk)
@@ -472,15 +743,19 @@ python demo\log_spammer.py --target tcp://127.0.0.1:5142 --pattern routine --rat
 
 ### C2. Launch two gateways (live with Splunk)
 
+Stop the single B4 daemon (`Ctrl+C` in its terminal) — C2 replaces it
+with two regional gateways. **Keep the sidecar (B4 Terminal 1) and
+Splunk running.**
+
 ```powershell
 Copy-Item configs\aegis.us-east.example.toml configs\aegis-us-east.toml
 Copy-Item configs\aegis.eu-west.example.toml configs\aegis-eu-west.toml
 # Fill in HEC tokens in both files (host is already us-east / eu-west)
 
-# Terminal 1
+# Terminal 2 (was B4 daemon terminal)
 cargo run --release --bin aegis-daemon -- --config configs\aegis-us-east.toml
 
-# Terminal 2
+# Terminal 4 (new)
 cargo run --release --bin aegis-daemon -- --config configs\aegis-eu-west.toml
 ```
 
@@ -515,7 +790,10 @@ To light up SPL observations and audit, edit `[splunk]` and `[audit]`
 in the config. To switch from Ollama to Splunk Hosted Models (when
 SLIM access is available), change `[llm].transport` to `"splunk_ai"`.
 
-Verify audit trail in Splunk (when `[audit]` is configured):
+Verify audit trail in Splunk (when `[audit]` is configured) — in
+Splunk Web (`http://localhost:8000`), open **Search & Reporting**,
+paste into the search bar, set the time range to *Last 24 hours*, and
+click **Search**:
 
 ```spl
 index=aegis sourcetype=aegis:agent
@@ -529,50 +807,17 @@ pairing with Splunk AI Assistant 2.0.
 
 ---
 
-## Optional overlays (work with either path)
+## Optional overlays (extras beyond Path B / C)
 
-### O1. Python AI sidecar (semantic classification)
+These are **add-ons**, not required for the core demo. Path B already
+includes the AI sidecar and AITK/CDTSM setup in B3.5–B3.6.
 
-Adds the `classification: {label, confidence, strategy}` field to every
-collapsed event. Required for routine-traffic summarization.
+### O1. Python AI sidecar — advanced configuration
 
-```powershell
-cd sidecar
-python -m venv .venv
-.\.venv\Scripts\Activate.ps1
-pip install -e .
-# Optional: pip install -e ".[dev]"  for pytest
-python -m aegis_sidecar.server
-# logs: Uvicorn running on http://127.0.0.1:8765
-```
-
-Then in `configs/aegis.toml` (or `configs/aegis.demo.toml`) flip:
-
-```toml
-[sidecar]
-url = "http://127.0.0.1:8765"
-enabled = true
-
-[summary]                    # optional: roll routine collapses into Summary events
-enabled = true
-```
-
-Restart the daemon and the next collapsed events in Splunk will carry
-a `classification` block. See [`sidecar/README.md`](sidecar/README.md)
-for the Splunk Hosted Model adapter env vars.
-
-**Splunk Hosted Models (preferred):** set `AEGIS_SPLUNK_URL` and
-`AEGIS_SPLUNK_TOKEN` to classify via SPL `| ai` — the same transport
-the AegisOps agent uses. See [`sidecar/README.md`](sidecar/README.md).
-
-**OpenAI-compatible fallback:** set `AEGIS_HOSTED_MODEL_URL` for local
-vLLM / Ollama during offline development.
-
-> **First-call note:** the sidecar lazy-downloads
-> `sentence-transformers/all-MiniLM-L6-v2` (~80 MB) on the first
-> `/embed` or `/classify` request. If the machine is offline the
-> sidecar falls back to a deterministic hash-based embedding so the
-> API stays functional.
+Path B [B3.5](#b35-install-the-ai-sidecar-required--powers-classifier-panels)
+covers the required sidecar install. Use this section for optional
+tuning: hosted-model adapters, summarization, and Splunk `| ai`
+transport. See [`sidecar/README.md`](sidecar/README.md).
 
 ### O2. Control-panel UI (browser dashboard)
 
@@ -639,9 +884,15 @@ guide lives in [`docs/mcp.md`](docs/mcp.md).
 | Daemon prints `bind aegis http listener at 127.0.0.1:7321 ... already in use` | Same, but for the MCP/REST port. Edit `mcp.http_listen` in your config or kill the stale daemon. |
 | `cargo run -- --check-hec` returns `HEC rejected events: 401` | Bad or disabled HEC token. Re-issue the token in Splunk Web and update `configs/aegis.toml`. |
 | `cargo run -- --check-hec` returns a TLS error | Self-signed cert. Set `verify_tls = false` in `[hec]`. |
-| Splunk search returns nothing even though daemon says `HEC batch delivered` | Check the *index* in your search matches `index=aegis` (or whatever you set). Check the time range covers when events landed. |
+| Splunk search returns nothing even though daemon says `HEC batch delivered` | Run the search in **Search & Reporting** (`http://localhost:8000`), not the HEC URL on port 8088. Check the *index* in your search matches `index=aegis` (or whatever you set). Check the time range covers when events landed. |
+| `index=aegis` returns zero events after running the B4 log spammer | 1) Confirm Terminals 1 and 2 (sidecar + daemon) are still running. 2) Re-run the spammer while both are up: `python demo\log_spammer.py --target tcp://127.0.0.1:5140 --pattern crashloop --rate 200 --duration 60`. 3) Wait ~60 seconds after it finishes so dedup metric windows can flush. 4) In **Search & Reporting**, run `index=aegis` with time range *Last 15 minutes* and click **Search**. |
+| Dashboard **AI classifier verdict** panel is empty | The sidecar only classifies **new** traffic. Follow [B4a–B4b](#b4-run-the-live-pipeline): 1) Terminal 1 — `python -m aegis_sidecar.server` (`Uvicorn running on http://127.0.0.1:8765`). 2) Terminal 2 — confirm daemon with `Invoke-RestMethod http://127.0.0.1:7321/api/status`. 3) Re-run the spammer while both are up. 4) Wait 60s. 5) Search `index=aegis sourcetype=aegis:metric "classification.label"=*` in **Search & Reporting**, then refresh the dashboard. |
+| `Invoke-RestMethod http://127.0.0.1:7321/api/status` fails | Daemon not running. Start Terminal 2: `cargo run --release --bin aegis-daemon` from the repo root; wait for `tcp ingest listening` before retrying. |
+| Splunk app install fails with `Winsock error 10054` or `Connection reset` | Large app download dropped mid-transfer. Download manually in your browser ([PSC Windows 64-bit](https://splunkbase.splunk.com/app/2883), [AI Toolkit](https://splunkbase.splunk.com/app/2890)), then **Apps → Manage Apps → Install app from file → Upload**. See [B3.6](#b36-install-splunk-ai-toolkit-required--powers-cdtsm-forecast-panels). |
+| Dashboard CDTSM panels show `Unknown search command 'apply'` | AI Toolkit not installed. Complete [B3.6](#b36-install-splunk-ai-toolkit-required--powers-cdtsm-forecast-panels), restart Splunk, re-open the dashboard. Panels also need ~15 min of `aegis:selfmetric` data — leave the daemon running. |
 | `npm install` in `ui/` is slow | First install is ~1 minute (82 packages). Subsequent runs are seconds. |
 | Sidecar startup error: `ModuleNotFoundError: No module named 'aegis_sidecar'` | You're running `python server.py` directly. Use `pip install -e .` inside the `sidecar/` virtualenv, then `python -m aegis_sidecar.server`. |
+| `pip install -e .` in `sidecar/` fails with `ConnectionResetError` while downloading `torch` | Transient network drop on the ~123 MB PyTorch wheel. Run `pip install torch --index-url https://download.pytorch.org/whl/cpu` first, then `pip install -e .` again — pip reuses cached packages. The `win_amd64` in the wheel name is correct for 64-bit Windows on Intel or AMD — it does not mean you need an AMD CPU. |
 | Sidecar takes ~30 s on first `/classify` call | Lazy-loading the sentence-transformer model (~80 MB). Subsequent calls are sub-millisecond. |
 | UI shows "UNREACHABLE" badge | Daemon isn't running, or its MCP/REST port differs from `7321`. Confirm the daemon log says `Control API at 127.0.0.1:7321/api/status`. |
 

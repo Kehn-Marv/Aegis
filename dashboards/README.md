@@ -5,12 +5,25 @@ sourcetype the gateway emits.
 
 ## Install
 
-1. In Splunk Web, go to **Dashboards → Create New Dashboard**.
-2. Choose **Dashboard Studio**.
-3. Click the source-editor icon (`{ }`) and paste the contents of
-   `aegis.json` over the placeholder, or use **Import** if your Splunk
-   version offers it.
-4. Save. Set the time range to *Last 1 hour* so the panels populate.
+Requires Path B [B3.5](../README.md#b35-install-the-ai-sidecar-required--powers-classifier-panels)
+(sidecar) and [B3.6](../README.md#b36-install-splunk-ai-toolkit-required--powers-cdtsm-forecast-panels)
+(AI Toolkit) before all 11 panels populate.
+
+1. In Splunk Web (`http://localhost:8000`), open **Search & Reporting**
+   → **Dashboards** → **Create New Dashboard**.
+2. On the dialog: set **Dashboard Title** to `Aegis`, leave
+   **Permissions** as *Private*, choose **Dashboard Studio**, select
+   **Absolute** layout mode, then click **Create**.
+3. In the editor toolbar, click the **Terminal** icon (`{ }` on a
+   document, immediately to the left of the `?` help icon). Replace all
+   placeholder JSON with the contents of `aegis.json`, click **Apply and
+   close**, then **Save** on the canvas.
+4. Open the dashboard. Set time range to *Last 15 minutes* (or *Last 1
+   hour*) and enable auto-refresh so panels populate while the daemon
+   runs.
+
+See the main [`README.md`](../README.md#b5-import-the-dashboard) for
+full step-by-step screenshots guidance.
 
 ## Panels
 

@@ -49,3 +49,19 @@ data/
 PITCH.md
 SUBMISSION.md
 docs/demo-script.md
+
+# Tests (kept local, not committed — see chat history for rationale)
+# Covers existing + any future Python test files / dirs at any depth.
+# NOTE: Rust inline `#[cfg(test)]` blocks live inside source files
+# (e.g. gateway/aegis-core/src/dedup.rs) and cannot be gitignored
+# without editing source. Those few lines stay where they are.
+tests/
+**/tests/
+**/test_*.py
+**/*_test.py
+**/conftest.py
+.pytest_cache/
+pytest.ini
+pytest-*.xml
+.coverage
+htmlcov/

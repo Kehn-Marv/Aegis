@@ -16,18 +16,25 @@ analysis than structural hashing can provide.
 
 ## Classification strategy
 
-`/classify` tries three strategies in order; each falls back to the next:
+`/classify` tries strategies in order; each falls back to the next:
 
 1. **Splunk Hosted Model (`| ai`)** — preferred when `AEGIS_SPLUNK_URL`
    and `AEGIS_SPLUNK_TOKEN` are set. Runs classification inside Splunk's
-   search pipeline via the AI Toolkit `| ai` command — the same
-   transport the AegisOps agent uses for reasoning.
-2. **OpenAI-compatible endpoint** — when `AEGIS_HOSTED_MODEL_URL` is set.
-   Useful for local vLLM, TGI, or Ollama during offline development.
+   search pipeline via the AI Toolkit `| ai` command. **Currently
+   hibernated** because the hackathon's Splunk Cloud trial does not
+   provision the SLIM API — see
+   [`../docs/splunk-blocker.md`](../docs/splunk-blocker.md). Code path
+   is preserved and tested; setting the env vars re-activates it when
+   SLIM access lands.
+2. **OpenAI-compatible endpoint (incl. local Ollama)** — when
+   `AEGIS_HOSTED_MODEL_URL` is set. **This is the recommended path
+   today**: point it at a local Ollama server running `gpt-oss:20b` and
+   you get genuine LLM classification at the edge with zero Splunk
+   dependencies.
 3. **Embedding-distance** — cosine similarity between the line's
    sentence-transformer embedding and centroids built from canonical
-   anomaly/routine seed phrases. Default day-to-day path when Splunk is
-   not configured: local, private, fast.
+   anomaly/routine seed phrases. Default day-to-day path when nothing
+   else is configured: local, private, fast.
 4. **Keyword heuristic** — last-resort signal so the API never returns
    `unknown` purely because nothing answered.
 
@@ -47,10 +54,39 @@ uv run aegis-sidecar
 Default address: `127.0.0.1:8765`. Override with `AEGIS_SIDECAR_HOST` /
 `AEGIS_SIDECAR_PORT`.
 
-## Splunk Hosted Model adapter (preferred)
+## Plan B: local Ollama (recommended today)
 
-Set these environment variables to route classification through Splunk
-Hosted Models via SPL `| ai`:
+Ollama exposes an OpenAI-compatible chat-completions endpoint that the
+existing adapter already supports. Install Ollama, pull the model, and
+point the sidecar at it:
+
+```powershell
+# 1. Install Ollama from https://ollama.com/download then:
+ollama pull qwen2.5:3b      # 1.9 GB on disk, ~3 GB RAM at runtime
+# Lower-spec alternative: ollama pull gemma2:2b   (~2 GB RAM)
+
+# 2. Point the sidecar at it (PowerShell):
+$env:AEGIS_HOSTED_MODEL_URL  = "http://127.0.0.1:11434/v1/chat/completions"
+$env:AEGIS_HOSTED_MODEL_NAME = "qwen2.5:3b"
+uv run aegis-sidecar
+```
+
+Verify:
+
+```powershell
+curl.exe http://127.0.0.1:8765/info
+# hosted_model_transport: "openai_compat"
+# hosted_model_name:      "qwen2.5:3b"
+```
+
+The Aegis gateway will now annotate every collapsed event with a real
+LLM classification, generated entirely on your machine.
+
+## Splunk Hosted Model adapter (hibernated)
+
+When a Splunk Cloud account with SLIM API access becomes available,
+set these environment variables to route classification through
+Splunk Hosted Models via SPL `| ai`:
 
 | Variable                     | Default         | Purpose                                      |
 |------------------------------|-----------------|----------------------------------------------|
@@ -81,13 +117,8 @@ For offline development without Splunk credentials:
 | `AEGIS_HOSTED_MODEL_TIMEOUT_SECS` | `6`              | Per-request timeout              |
 | `AEGIS_EMBEDDING_MODEL`           | MiniLM-L6-v2       | Override the local embedder      |
 
-## Tests
+<!-- Tests are intentionally not committed to this repo (see .gitignore).
+     Devs adding tests locally can install dev deps with:
+       uv pip install -e ".[dev]"
+     and run them with `uv run pytest`. -->
 
-```powershell
-uv pip install -e ".[dev]"
-uv run pytest
-```
-
-The classifier tests exercise the keyword and embedding-distance paths
-through a deterministic hash-based fallback embedder, so they pass
-offline without downloading sentence-transformers.

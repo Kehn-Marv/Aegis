@@ -4,7 +4,7 @@
 [![Rust](https://img.shields.io/badge/rust-stable-EB6228?style=flat-square&logo=rust)](Cargo.toml)
 [![Python](https://img.shields.io/badge/python-3.11+-3776AB?style=flat-square&logo=python&logoColor=white)](sidecar/pyproject.toml)
 [![MCP](https://img.shields.io/badge/Splunk-MCP%20ready-7C5CFF?style=flat-square)](docs/mcp.md)
-[![Tests](https://img.shields.io/badge/tests-45%20passing-3DDC97?style=flat-square)](#)
+[![Ollama](https://img.shields.io/badge/LLM-Ollama%20qwen2.5%3A3b-7C5CFF?style=flat-square)](docs/splunk-blocker.md)
 
 > **Splunk Agentic Ops Hackathon 2026** · Observability track ·
 > targeting *Best Use of Splunk MCP Server*, *Best Use of Splunk Hosted Models*,
@@ -24,6 +24,7 @@ troubleshooting.
 * [`docs/finops-math.md`](docs/finops-math.md) — verifiable cost-savings worked example (99.96% reduction)
 * [`docs/mcp.md`](docs/mcp.md) — Cursor & Claude Desktop integration snippets
 * [`docs/saia-integration.md`](docs/saia-integration.md) — using Splunk AI Assistant 2.0 alongside Aegis
+* [`docs/splunk-blocker.md`](docs/splunk-blocker.md) — Splunk Hosted Models trial-account blocker + Ollama Plan B
 * [`agent/README.md`](agent/README.md) — autonomous AegisOps agent (observe → reason → act)
 
 It is built for two failure modes the rest of the observability stack ignores:
@@ -53,8 +54,10 @@ during an outage can spike ingest 100× overnight.
 node/region cuts repetitive error spam by ~99.96% at the edge
 ([`docs/finops-math.md`](docs/finops-math.md)), keeps anomalies
 first-in-line during uplink loss, and lets an autonomous **AegisOps
-Agent** (`agent/`) watch the fleet and act via Splunk Hosted Models —
-without an operator in the prompt loop.
+Agent** (`agent/`) watch the fleet and act via a pluggable LLM
+transport — local Ollama (`qwen2.5:3b`, runs in ~3 GB RAM) by
+default, Splunk Hosted Models (`| ai`) when the account is
+provisioned — without an operator in the prompt loop.
 
 This is not a generic log forwarder. It is **FinOps guardrails +
 agentic edge control** purpose-built for Splunk's Observability track.
@@ -72,10 +75,10 @@ Microservice ──raw──▶ Aegis Gateway ──processed──▶ Splunk HE
                           ▼                   │                  Dashboard
                    Python AI Sidecar    External AI Agent
                   (embeddings, cluster) (Cursor / Claude Desktop)
-                                              │
-                    AegisOps Agent ───────────┼──MCP──▶ Splunk MCP Server
-                    (autonomous loop)         │
-                                              └──MCP──▶ Aegis MCP Server
+
+                  AegisOps Agent (autonomous loop)
+                  └─ LLM transport: Ollama (default) │ Splunk |ai (hibernated)
+                  └─ REST → Aegis  │  SPL → Splunk  │  HEC → audit
 ```
 
 ## Repository layout
@@ -135,12 +138,10 @@ git clone https://github.com/<your-handle>/aegis
 cd aegis
 cargo test --workspace
 # Expect: 13 Rust tests passing (aegis-core)
-# Also: 12 sidecar pytest + 20 agent pytest (see sidecar/ and agent/)
 ```
 
 If you see 13 passing Rust tests, the foundation is solid and you can pick
-your path. Run `python -m pytest` in `sidecar/` and `agent/` for the
-full 45-test suite.
+your path.
 
 ---
 
@@ -385,18 +386,28 @@ for an SPL crib sheet.
 ## Path C — Full stack (multi-edge + AegisOps Agent)
 
 This path demonstrates the **autonomous agent loop** — the centerpiece
-for the Observability track. Two regional gateways (`us-east`, `eu-west`)
-run in parallel; the AegisOps agent polls both, queries Splunk for
-trends, reasons with a Splunk Hosted Model via `| ai`, and actuates
+for the Observability track. Two regional gateways (`us-east`,
+`eu-west`) run in parallel; the AegisOps agent polls both, optionally
+queries Splunk for trends, **reasons with a local Ollama LLM
+(default) or Splunk Hosted Models when provisioned**, and actuates
 low-risk decisions (`diagnostic`) while logging everything to
 `sourcetype=aegis:agent`.
 
-**Prerequisites:** Path B complete (Splunk + HEC working). Additionally:
+> **About the LLM transport.** The hackathon's Splunk Cloud 14-day
+> trial does not provision the SLIM API that Splunk Hosted Models run
+> on. We pivoted to **Ollama as the default LLM transport**, running
+> the same `gpt-oss:20b` model identifier locally next to the edge
+> gateway. The Splunk `| ai` integration is preserved as a hibernated
+> transport — see [`docs/splunk-blocker.md`](docs/splunk-blocker.md).
 
-| Credential | Where to get it |
-|------------|-----------------|
-| Splunk auth token | *Settings → Tokens → New Token* — needs `search` + `apply_ai_commander_command` |
-| AI Toolkit + Hosted Models | Confirm `| ai` works in Search: `\| makeresults \| ai prompt="hello" provider=splunk_hosted model=gpt-oss-20b` |
+**Prerequisites:** Path B (HEC) is optional. Ollama is mandatory.
+
+| Prerequisite | Where to get it |
+|--------------|-----------------|
+| **Ollama** (mandatory) | <https://ollama.com/download>, then `ollama pull qwen2.5:3b` (1.9 GB on disk, ~3 GB RAM — runs comfortably on 6-8 GB systems). Lower-spec: `gemma2:2b` (~2 GB) or `qwen2.5:1.5b` (~1.5 GB). Higher-spec: `qwen2.5:7b` (~5 GB). Set the picked model in `[llm.ollama].model` |
+| Splunk auth token (optional, lights up SPL observations) | *Settings → Tokens → New Token* with `search` capability |
+| Splunk HEC token (optional, lights up agent audit trail) | *Settings → Data inputs → HTTP Event Collector* |
+| Splunk SLIM API (only for `[llm].transport="splunk_ai"`) | **Currently trial-gated.** See [`docs/splunk-blocker.md`](docs/splunk-blocker.md) |
 
 ### C1. Launch two gateways (demo without Splunk)
 
@@ -437,18 +448,30 @@ python -m venv .venv
 .\.venv\Scripts\Activate.ps1
 pip install -e .
 Copy-Item configs\aegis-ops.example.toml configs\aegis-ops.toml
-notepad configs\aegis-ops.toml
-# Fill in: splunk.url, splunk.token, audit.hec_token
-aegis-ops run --config configs\aegis-ops.toml
+# (Defaults are pure-Ollama, zero Splunk creds. Edit only to add Splunk.)
+aegis-ops run --config configs\aegis-ops.toml --once -v
 ```
 
-Dry-run first (no actuation, no HEC audit):
+The first tick takes ~10 seconds (Ollama loads the model). Subsequent
+ticks are sub-second. Expected output:
+
+```
+INFO AegisOps starting: 2 gateway(s), policy=low_risk_auto, dry_run=False, llm=ollama, splunk=off, audit=off
+INFO [us-east] decision=noop(-) conf=0.95 exec=auto      | gateway healthy, no actionable signal
+INFO [eu-west] decision=noop(-) conf=0.95 exec=auto      | gateway healthy, no actionable signal
+```
+
+Dry-run for prompt iteration (no actuation, no HEC):
 
 ```powershell
 aegis-ops run --config configs\aegis-ops.toml --dry-run --once -v
 ```
 
-Verify audit trail in Splunk:
+To light up SPL observations and audit, edit `[splunk]` and `[audit]`
+in the config. To switch from Ollama to Splunk Hosted Models (when
+SLIM access is available), change `[llm].transport` to `"splunk_ai"`.
+
+Verify audit trail in Splunk (when `[audit]` is configured):
 
 ```spl
 index=aegis sourcetype=aegis:agent
@@ -456,9 +479,9 @@ index=aegis sourcetype=aegis:agent
 | sort -_time
 ```
 
-See [`agent/README.md`](agent/README.md) for policy modes and
-[`docs/saia-integration.md`](docs/saia-integration.md) for pairing with
-Splunk AI Assistant 2.0.
+See [`agent/README.md`](agent/README.md) for transport / policy
+details and [`docs/saia-integration.md`](docs/saia-integration.md) for
+pairing with Splunk AI Assistant 2.0.
 
 ---
 

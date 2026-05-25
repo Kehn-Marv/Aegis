@@ -432,70 +432,124 @@ The two bottom dashboard panels (`Queue depth — 15-min forecast` and
 command. Without AI Toolkit installed you will see
 `Unknown search command 'apply'`.
 
-**Splunkbase** is just Splunk's app store. You do not open a separate
-website — in Splunk Web go to **Apps → Find More Apps** and you land on
-**Browse More Apps** (the page with the search box on the left and app
-tiles in the middle).
+Install two Splunkbase apps — **different methods** depending on size:
 
-Install two apps from that page, **one at a time**, restarting Splunk
-after each:
+| App | Size | Install method |
+|---|---|---|
+| Python for Scientific Computing (Windows 64-bit) | ~800 MB | **CLI only** — web Install/Upload fails |
+| Splunk AI Toolkit | ~30 MB | **Splunk Web** — Apps → Find More Apps → Install |
 
-#### App 1 — Python for Scientific Computing
+#### App 1 — Python for Scientific Computing (Windows 64-bit) — CLI
 
-> **Pick the Windows one.** You need **Python for Scientific Computing
-> (for Windows 64-bit)** — not Linux, Mac Intel, or Mac Apple Silicon.
+> Download the **Windows 64-bit** build — not Linux or Mac. **Do not**
+> use Splunk Web's green Install button or Upload for this app — the
+> package is too large and the web UI fails with network errors or
+> `Internal Server Error`.
+
+Open **PowerShell as Administrator**. Splunk must be **running** before
+`install app`. Replace `YOUR_USER` / `YOUR_PASSWORD` with your Splunk
+admin credentials.
+
+1. In your browser, download from Splunkbase (log in if prompted):
+   [Python for Scientific Computing — Windows 64-bit](https://splunkbase.splunk.com/app/2883)
+2. Save the `.tgz` to your Downloads folder. Wait for the full download
+   to finish (~800 MB).
+3. Install via CLI (adjust the filename if yours differs):
+
+```powershell
+& "C:\Program Files\Splunk\bin\splunk.exe" start
+& "C:\Program Files\Splunk\bin\splunk.exe" install app "$env:USERPROFILE\Downloads\python-for-scientific-computing-for-windows-64-bit_432.tgz" -update 1 -auth YOUR_USER:YOUR_PASSWORD
+& "C:\Program Files\Splunk\bin\splunk.exe" restart
+```
+
+Expect: `App '...\python-for-scientific-computing-for-windows-64-bit_432.tgz' installed`
+
+Verify in Splunk Web → **Apps → Manage Apps** — **Python for Scientific
+Computing (for Windows 64-bit)** should appear.
+
+#### App 2 — Splunk AI Toolkit — Splunk Web
+
+Install PSC (App 1) first — AITK depends on it. At ~30 MB, the AI
+Toolkit installs reliably through Splunk Web (no CLI needed).
 
 1. Splunk Web → top-left **Apps** dropdown → **Find More Apps**.
-2. In the left sidebar search box (*Find apps by keyword…*), type:
-   `Python for Scientific Computing`
-3. Click **Python for Scientific Computing (for Windows 64-bit)** →
-   green **Install**.
-4. Follow the prompts → when it asks to restart, **restart Splunk**.
+2. In the left search box, type: `Splunk AI Toolkit`
+3. Click **Splunk AI Toolkit** → green **Install** button.
+4. When the **Install — Success** dialog appears, click **Done**.
+5. Restart Splunk if prompted (~1 minute).
 
-**If Install fails with `Winsock error 10054` or `Connection reset`:**
-the package is very large and Splunk's built-in downloader often drops
-the connection. Use the manual path instead:
+You should see **Splunk AI Toolkit (5.7.x)** under **Apps → Manage Apps**.
 
-1. In your **browser** (Chrome/Edge), open
-   [Python for Scientific Computing — Windows 64-bit](https://splunkbase.splunk.com/app/2883)
-   (log in with the same Splunk account if prompted).
-2. Click **Download** and save the `.spl` or `.tgz` file to your
-   Downloads folder. Wait for the full download to finish in the
-   browser — do not interrupt it.
-3. Back in Splunk Web → **Apps** (left sidebar) → **Manage Apps**.
-4. Click **Install app from file** → **Choose File** → select the
-   file you downloaded → **Upload**.
-5. Restart Splunk when prompted (~1–2 minutes).
+#### B3.6a. Grant AI command permission (one-time)
 
-#### App 2 — Splunk AI Toolkit
+Before any AITK search works, your Splunk role needs the AI capability:
 
-1. Install PSC (App 1) first — AITK depends on it.
-2. Either use **Find More Apps** → search `Splunk AI Toolkit` →
-   **Install**, **or** if that also fails with a network error:
-   - Download from
-     [Splunk AI Toolkit on Splunkbase](https://splunkbase.splunk.com/app/2890)
-   - **Apps → Manage Apps → Install app from file → Upload**
-3. Restart Splunk when prompted.
+1. Splunk Web → **Settings** (gear, top-right) → **Roles**.
+2. Click your role (usually **`admin`**).
+3. Open the **Capabilities** tab.
+4. Search for `apply_ai_commander` → check **`apply_ai_commander_command`**.
+5. **Save**.
 
-#### Smoke-test AITK loaded
+If you skip this, searches fail with:
+`Error in 'ai' command: User does not have permission to use 'ai' command.`
 
-In **Search & Reporting**, paste into the search bar and click
-**Search**:
+#### B3.6b. Smoke-test CDTSM (Splunk Cloud only)
+
+The Aegis dashboard uses **`| apply CDTSM`**, not the **`| ai`** LLM
+command. CDTSM is a **Splunk-Hosted foundation model** — it calls the
+same SLIM/tenant API as Splunk Hosted Models.
+
+> **Local Splunk Enterprise (Developer License):** CDTSM will **not**
+> run. You will see:
+> `CDTSM: Failed to determine API endpoint: Failed to retrieve tenant info: HTTP 404 Not Found`
+> That is the same infrastructure gate documented in
+> [`docs/splunk-blocker.md`](docs/splunk-blocker.md) — SLIM-backed
+> hosted models are **Splunk Cloud only**. Path B on local Enterprise
+> still delivers **9 of 11 dashboard panels** (everything except the
+> two CDTSM forecast lines). The integration is wired and ready; it
+> activates when you point Splunk at a Cloud stack with CDTSM enabled.
+
+On a **Splunk Cloud** stack with CDTSM provisioned, keep the **sidecar +
+daemon** running (B4) so `aegis:selfmetric` data exists, then in
+**Search & Reporting** (time range *Last 15 minutes*):
+
+```spl
+index=aegis sourcetype=aegis:selfmetric
+| timechart span=1m latest(queue_depth) AS queue_depth
+| apply CDTSM queue_depth time_field=_time forecast_k=15 conf_interval=90 show_input=true
+```
+
+Use a **colon** in the sourcetype (`aegis:selfmetric`), not an underscore.
+
+**Success:** a table/chart with `queue_depth` and `predicted(queue_depth)`
+columns — no `Unknown search command 'apply'`.
+
+**No data yet:** run B4 first (daemon + spammer), wait ~15 minutes, retry.
+
+Refresh the Aegis dashboard — the bottom two CDTSM forecast panels populate
+on Cloud; on local Enterprise they will show the tenant/404 error until
+you migrate to a provisioned Cloud stack.
+
+#### B3.6c. Optional — smoke-test `| ai` (Path C / Ollama)
+
+The simple `| ai prompt=prompt` query **without** a `provider=` argument
+requires a **default LLM connection** in AITK. If you see
+`No default LLM configuration found`, that is expected on Path B when you
+have not configured Ollama in AITK yet.
+
+Path C users who want SPL `| ai` (Ollama via AITK) should follow
+[`docs/aitk-ollama.md`](docs/aitk-ollama.md): install Ollama, create an
+**Ollama** connection in **Splunk AI Toolkit → Connection Management**,
+then run:
 
 ```spl
 | makeresults
 | eval prompt="Reply with the single word pong."
-| ai prompt=prompt
+| ai prompt=prompt provider=ollama_local model=gpt-oss:20b
 ```
 
-You should get back a row within a few seconds. If you see
-`Unknown search command 'ai'`, AITK is not installed or Splunk needs
-another restart.
-
-The CDTSM forecast lines themselves need ~15 minutes of
-`sourcetype=aegis:selfmetric` data (generated in B4) before they draw
-a meaningful plot. See [`docs/cdtsm-forecast.md`](docs/cdtsm-forecast.md)
-and [`docs/aitk-ollama.md`](docs/aitk-ollama.md) for deeper AITK wiring.
+See [`docs/cdtsm-forecast.md`](docs/cdtsm-forecast.md) for how CDTSM
+feeds the dashboard and agent loop.
 
 ### B4. Run the live pipeline
 
@@ -540,6 +594,14 @@ Invoke-RestMethod http://127.0.0.1:7321/api/status
 * **"Unable to connect" / connection refused** → start Terminal 2
   (`cargo run --release --bin aegis-daemon`) and wait for the ingest /
   HEC log lines, then retry.
+
+**Leaving the daemon running overnight is fine.** If Splunk restarts or
+HEC goes unreachable, the daemon logs `self-metric emit failed` every
+~15 seconds but keeps accepting ingest on ports 5140/5141. Check health
+anytime with `Invoke-RestMethod http://127.0.0.1:7321/api/status`
+(`online: true` = process healthy). After Splunk is back, verify HEC with
+`cargo run --release --bin aegis-daemon -- --check-hec` (`HEC ping
+accepted`), then re-run the spammer to refresh dashboard panels.
 
 #### B4b. After the spammer finishes
 
@@ -666,7 +728,7 @@ In Splunk Web (`http://localhost:8000`):
 |---|---|
 | Headline KPIs, ingest chart, top signatures, first-occurrence rate | B4 daemon + HEC (always) |
 | AI classifier verdict, Classifier strategy used | B3.5 sidecar (Terminal 1) |
-| CDTSM forecast lines (bottom two panels) | B3.6 AI Toolkit + ~15 min of selfmetric data |
+| CDTSM forecast lines (bottom two panels) | B3.6 AI Toolkit + **Splunk Cloud with CDTSM/SLIM** + ~15 min of selfmetric data. **Not available on local Enterprise Developer License** — panels error with tenant 404; other 9 panels still work. |
 
 You now have live panels for dedup savings, top suppressed signatures,
 AI classifier verdict, classifier-strategy breakdown, CDTSM forecasts,
@@ -888,8 +950,14 @@ guide lives in [`docs/mcp.md`](docs/mcp.md).
 | `index=aegis` returns zero events after running the B4 log spammer | 1) Confirm Terminals 1 and 2 (sidecar + daemon) are still running. 2) Re-run the spammer while both are up: `python demo\log_spammer.py --target tcp://127.0.0.1:5140 --pattern crashloop --rate 200 --duration 60`. 3) Wait ~60 seconds after it finishes so dedup metric windows can flush. 4) In **Search & Reporting**, run `index=aegis` with time range *Last 15 minutes* and click **Search**. |
 | Dashboard **AI classifier verdict** panel is empty | The sidecar only classifies **new** traffic. Follow [B4a–B4b](#b4-run-the-live-pipeline): 1) Terminal 1 — `python -m aegis_sidecar.server` (`Uvicorn running on http://127.0.0.1:8765`). 2) Terminal 2 — confirm daemon with `Invoke-RestMethod http://127.0.0.1:7321/api/status`. 3) Re-run the spammer while both are up. 4) Wait 60s. 5) Search `index=aegis sourcetype=aegis:metric "classification.label"=*` in **Search & Reporting**, then refresh the dashboard. |
 | `Invoke-RestMethod http://127.0.0.1:7321/api/status` fails | Daemon not running. Start Terminal 2: `cargo run --release --bin aegis-daemon` from the repo root; wait for `tcp ingest listening` before retrying. |
-| Splunk app install fails with `Winsock error 10054` or `Connection reset` | Large app download dropped mid-transfer. Download manually in your browser ([PSC Windows 64-bit](https://splunkbase.splunk.com/app/2883), [AI Toolkit](https://splunkbase.splunk.com/app/2890)), then **Apps → Manage Apps → Install app from file → Upload**. See [B3.6](#b36-install-splunk-ai-toolkit-required--powers-cdtsm-forecast-panels). |
-| Dashboard CDTSM panels show `Unknown search command 'apply'` | AI Toolkit not installed. Complete [B3.6](#b36-install-splunk-ai-toolkit-required--powers-cdtsm-forecast-panels), restart Splunk, re-open the dashboard. Panels also need ~15 min of `aegis:selfmetric` data — leave the daemon running. |
+| PSC install fails (`Winsock 10054`, `Internal Server Error`, `Package is too large`) | PSC (~800 MB) must use **CLI**, not Splunk Web. Download the `.tgz` from [Splunkbase](https://splunkbase.splunk.com/app/2883), then while Splunk is **running**: `splunk install app path\to\file.tgz -update 1 -auth user:pass` → `splunk restart`. See [B3.6 App 1](#b36-install-splunk-ai-toolkit-required--powers-cdtsm-forecast-panels). |
+| `install app` says `splunkd is unreachable` | Splunk is stopped — run `splunk start` first, wait for Splunk Web, then `install app`. |
+| AITK web Install fails | AITK is only ~30 MB — retry **Apps → Find More Apps → Splunk AI Toolkit → Install**. If it keeps failing, download from [Splunkbase](https://splunkbase.splunk.com/app/2890) and use the same CLI `install app` path as PSC. |
+| `Error in 'ai' command: User does not have permission` | Grant **`apply_ai_commander_command`** on your Splunk role: **Settings → Roles → admin → Capabilities**. See [B3.6a](#b36a-grant-ai-command-permission-one-time). |
+| `Error in 'ai' command: No default LLM configuration found` | You have not configured a default LLM in AITK Connection Management. For Path C, set up Ollama — see [B3.6c](#b36c-optional--smoke-test-ai-path-c--ollama) and [`docs/aitk-ollama.md`](docs/aitk-ollama.md). Unrelated to CDTSM. |
+| `CDTSM: Failed to retrieve tenant info: HTTP 404 Not Found` | **Expected on local Splunk Enterprise.** CDTSM is Splunk-Hosted (SLIM/Cloud only). Path B still works — 9 of 11 dashboard panels populate. See [B3.6b](#b36b-smoke-test-cdtsm-splunk-cloud-only) and [`docs/splunk-blocker.md`](docs/splunk-blocker.md). |
+| Dashboard CDTSM panels show `Unknown search command 'apply'` | AI Toolkit not installed. Complete [B3.6](#b36-install-splunk-ai-toolkit-required--powers-cdtsm-forecast-panels), restart Splunk, re-open the dashboard. On Cloud, panels also need ~15 min of `aegis:selfmetric` data. |
+| Daemon logs `self-metric emit failed` repeatedly | Splunk or HEC was temporarily unreachable (restart, sleep, network). The daemon keeps running — verify with `Invoke-RestMethod http://127.0.0.1:7321/api/status` (`online: true` = healthy). Fix Splunk/HEC: `cargo run --release --bin aegis-daemon -- --check-hec` should print `HEC ping accepted`. Re-run the spammer to refresh dashboard data. Optional: restart the daemon after Splunk is back up. |
 | `npm install` in `ui/` is slow | First install is ~1 minute (82 packages). Subsequent runs are seconds. |
 | Sidecar startup error: `ModuleNotFoundError: No module named 'aegis_sidecar'` | You're running `python server.py` directly. Use `pip install -e .` inside the `sidecar/` virtualenv, then `python -m aegis_sidecar.server`. |
 | `pip install -e .` in `sidecar/` fails with `ConnectionResetError` while downloading `torch` | Transient network drop on the ~123 MB PyTorch wheel. Run `pip install torch --index-url https://download.pytorch.org/whl/cpu` first, then `pip install -e .` again — pip reuses cached packages. The `win_amd64` in the wheel name is correct for 64-bit Windows on Intel or AMD — it does not mean you need an AMD CPU. |

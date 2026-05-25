@@ -37,6 +37,16 @@ full step-by-step screenshots guidance.
 | AI classifier verdict          | Pie of suppressed events by `anomaly` / `routine` / `unknown`                     |
 | Classifier strategy used       | Whether the call went to the hosted model, embeddings, or the keyword fallback    |
 | First-occurrence events        | Rate of *new* signatures — spikes here usually mean a deploy or incident          |
+| Queue depth — 15-min forecast  | CDTSM prediction of gateway queue depth (requires B3.6 AI Toolkit + ~15 min data) |
+| Dedup savings % — 15-min forecast | CDTSM prediction of dedup savings trend                                        |
+
+**CDTSM panels empty or erroring?**
+
+* **`Unknown search command 'apply'`** — install AI Toolkit ([B3.6](../README.md#b36-install-splunk-ai-toolkit-required--powers-cdtsm-forecast-panels)).
+* **`Failed to retrieve tenant info: HTTP 404`** — **expected on local Splunk Enterprise.** CDTSM is Splunk Cloud / SLIM only. The other **9 panels** still work. See [`docs/splunk-blocker.md`](../docs/splunk-blocker.md).
+* On **Splunk Cloud** with CDTSM enabled, run the [B3.6b smoke test](../README.md#b36b-smoke-test-cdtsm-splunk-cloud-only). Sourcetype must be `aegis:selfmetric` (colon, not underscore).
+
+Do **not** use `| ai prompt=prompt` to validate CDTSM — that is a separate LLM command.
 
 ## Sourcetypes consumed
 

@@ -397,8 +397,17 @@ One-time install:
 cd sidecar
 python -m venv .venv
 .\.venv\Scripts\Activate.ps1
-# PyTorch (~123 MB) often fails mid-download from PyPI on Windows.
-# Install it from the official CPU wheel index first, then the rest:
+pip install -e . --extra-index-url https://download.pytorch.org/whl/cpu
+```
+
+That single command installs the sidecar **and** pulls PyTorch from
+Splunk's recommended CPU wheel index (sentence-transformers needs torch;
+PyPI's default source often flakes on Windows mid-download).
+
+If the download fails partway through (`ConnectionResetError`), retry
+PyTorch alone, then finish the rest — pip reuses the cached wheel:
+
+```powershell
 pip install torch --index-url https://download.pytorch.org/whl/cpu
 pip install -e .
 ```
@@ -530,7 +539,28 @@ Refresh the Aegis dashboard — the bottom two CDTSM forecast panels populate
 on Cloud; on local Enterprise they will show the tenant/404 error until
 you migrate to a provisioned Cloud stack.
 
+#### CDTSM vs `| ai` vs Ollama — three different things
+
+| Feature | SPL command | What it does | Works on local Enterprise? |
+|---|---|---|---|
+| **CDTSM forecast** | `\| apply CDTSM` | Predicts `queue_depth` / `dedup_savings_pct` 15 min ahead (time-series model) | **No** — Splunk Cloud / SLIM only |
+| **LLM chat / reasoning** | `\| ai prompt=…` | Text generation, policy decisions, classifier via hosted model | **Yes** — with Ollama wired through AITK Connection Management |
+| **Sidecar classifier** | _(none — HTTP to sidecar)_ | Labels logs as routine/anomaly | **Yes** — already working on your dashboard |
+
+**Ollama cannot substitute for CDTSM.** They solve different problems:
+CDTSM forecasts numbers from historical metrics; Ollama is a language
+model for text/reasoning. Path C uses Ollama for the **agent's brain**
+(`| ai`), not for the dashboard forecast panels.
+
 #### B3.6c. Optional — smoke-test `| ai` (Path C / Ollama)
+
+**What B3.6c actually means:** this is an optional smoke test for Path C
+— it checks that Splunk can call Ollama through the AI Toolkit for LLM
+chat/reasoning. That is what the AegisOps agent uses when it decides
+what action to take.
+
+It has **nothing to do with fixing CDTSM**. Ollama is not a time-series
+forecaster and cannot replace `| apply CDTSM`.
 
 The simple `| ai prompt=prompt` query **without** a `provider=` argument
 requires a **default LLM connection** in AITK. If you see
@@ -548,8 +578,10 @@ then run:
 | ai prompt=prompt provider=ollama_local model=gpt-oss:20b
 ```
 
-See [`docs/cdtsm-forecast.md`](docs/cdtsm-forecast.md) for how CDTSM
-feeds the dashboard and agent loop.
+This validates the **LLM path** for Path C (AegisOps agent reasoning).
+It does **not** fix or replace the CDTSM forecast panels — those still
+require Splunk Cloud. See [`docs/cdtsm-forecast.md`](docs/cdtsm-forecast.md)
+for how CDTSM and the LLM work together in the full agent loop on Cloud.
 
 ### B4. Run the live pipeline
 
@@ -781,10 +813,52 @@ dashboard working). **Ollama is mandatory** for the agent.
 | Prerequisite | Where to get it |
 |--------------|-----------------|
 | **Path B complete** | [B1–B5 above](#path-b--live-mode-with-splunk-enterprise-45-minutes) — Splunk, HEC, sidecar, AITK, dashboard |
-| **Ollama** (mandatory) | <https://ollama.com/download>, then `ollama pull gpt-oss:20b` (~13 GB on disk, ~16 GB RAM — matches the `gpt-oss-20b` Splunk Hosted Models identifier). Smaller-RAM alternatives: `qwen2.5:7b` (~5 GB), `qwen2.5:3b` (~3 GB, explicitly tuned for JSON), `gemma2:2b` (~2 GB), `qwen2.5:1.5b` (~1.5 GB). Set the picked model in `[llm.ollama].model` |
-| Splunk auth token (recommended — lights up SPL observations + CDTSM in agent) | *Settings → Tokens → New Token* with `search` capability |
-| Splunk HEC token | Already configured in Path B |
-| Splunk SLIM API (only for `[llm].transport="splunk_ai"`) | **Currently trial-gated.** See [`docs/splunk-blocker.md`](docs/splunk-blocker.md) |
+| **Ollama** (mandatory) | See [C0 Install Ollama](#c0-install-ollama-one-time) below |
+| Splunk auth token (recommended — enables SPL observations in the agent) | Splunk Web → **Settings → Tokens → New Token** with `search` capability. Paste into `[splunk].token` in `agent/configs/aegis-ops.toml`. Does **not** make CDTSM work on local Enterprise — see note below. |
+| Splunk HEC token | Already configured in Path B — reuse for `[audit]` in the agent config |
+| **Splunk's cloud AI service** _(optional — skip for Path C)_ | Splunk's **paid/cloud** way to run the official hosted LLMs (`gpt-oss-20b`, etc.) instead of Ollama. **Not available** on local Enterprise or most free trials — same wall as CDTSM. You do **not** need this; Path C uses **Ollama** by default. Only relevant if a Splunk sales engineer provisions a Cloud stack for you. Details: [`docs/splunk-blocker.md`](docs/splunk-blocker.md) |
+
+> **Splunk token vs CDTSM:** the auth token lets the **AegisOps agent**
+> run SPL searches against your Splunk (top signatures, classifier
+> counts, trends). CDTSM inside the agent is **off by default**
+> (`cdtsm_enabled = false`) and still needs **Splunk Cloud with SLIM**
+> — same 404 gate as the dashboard forecast panels. On local Enterprise,
+> configure the token for SPL observations; leave CDTSM disabled.
+
+### C0. Install Ollama (one-time)
+
+1. Download and install from <https://ollama.com/download> (Windows
+   installer — same as any other app).
+2. Open **any PowerShell window** (repo root, Desktop, anywhere — Ollama
+   is system-wide, not tied to this project folder).
+3. Pull the model that fits your RAM:
+
+```powershell
+# Default — needs ~16 GB system RAM
+ollama pull gpt-oss:20b
+
+# Smaller machines — pick one:
+ollama pull qwen2.5:3b    # ~3 GB active, good JSON (~6–8 GB RAM total)
+ollama pull qwen2.5:7b    # ~5 GB active
+ollama pull gemma2:2b     # ~2 GB active
+```
+
+4. Confirm Ollama is serving:
+
+```powershell
+ollama list
+# should show the model you pulled
+
+curl.exe http://127.0.0.1:11434/api/tags
+# should return JSON listing models
+```
+
+5. Set the same model name in `agent/configs/aegis-ops.toml` under
+   `[llm.ollama].model` (e.g. `qwen2.5:3b` if you pulled that).
+
+Ollama runs as a background service after install — you do **not** need
+a dedicated terminal for it. Only the **agent** and **gateways** need
+their own terminals in C2–C3.
 
 ### C1. Launch two gateways (demo without Splunk)
 
@@ -848,9 +922,32 @@ Dry-run for prompt iteration (no actuation, no HEC):
 aegis-ops run --config configs\aegis-ops.toml --dry-run --once -v
 ```
 
-To light up SPL observations and audit, edit `[splunk]` and `[audit]`
-in the config. To switch from Ollama to Splunk Hosted Models (when
-SLIM access is available), change `[llm].transport` to `"splunk_ai"`.
+To light up **SPL observations** and **audit**, edit `[splunk]` and
+`[audit]` in `agent/configs/aegis-ops.toml`:
+
+```toml
+[splunk]
+url        = "https://localhost:8089"   # Splunk REST API (port 8089, not 8000)
+token      = "YOUR-SPLUNK-AUTH-TOKEN"    # Settings → Tokens → New Token (search capability)
+verify_tls = false                       # match your local Splunk cert setup
+
+[audit]
+hec_endpoint = "https://localhost:8088/services/collector/event"
+hec_token    = "YOUR-HEC-TOKEN"          # same token from Path B configs/aegis.toml
+verify_tls   = false
+```
+
+**Create the Splunk auth token:** Splunk Web → **Settings** (gear) →
+**Tokens** → **New Token** → name it `aegis-ops`, check **`search`**
+capability → **Create** → copy the token string into `[splunk].token`.
+
+This lets the agent query Splunk for trends and classifier stats each
+tick. It does **not** enable CDTSM on local Enterprise — leave
+`cdtsm_enabled = false` in `[observe]` unless you are on Splunk Cloud
+with CDTSM provisioned.
+
+To switch from Ollama to Splunk Hosted Models (when SLIM access is
+available), change `[llm].transport` to `"splunk_ai"`.
 
 Verify audit trail in Splunk (when `[audit]` is configured) — in
 Splunk Web (`http://localhost:8000`), open **Search & Reporting**,

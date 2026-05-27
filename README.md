@@ -1003,9 +1003,12 @@ pip install -e .
 when you set `[llm.ollama].model` (e.g. `qwen2.5:3b`). **Do not run
 `Copy-Item` again** — that would overwrite your edits.
 
-Confirm before running:
+Confirm before running (**must be inside `agent/`** — the config is
+not in the repo-root `configs/` folder):
 
 ```powershell
+cd c:\Users\chukw\Desktop\splunk\agent
+
 # File exists?
 Test-Path configs\aegis-ops.toml
 
@@ -1014,6 +1017,10 @@ ollama list
 Select-String -Path configs\aegis-ops.toml -Pattern '^model\s*='
 ```
 
+From repo root, use `agent\configs\aegis-ops.toml` instead of
+`configs\aegis-ops.toml` — that root `configs/` folder is for the
+**daemon** (Path B/C2), not the agent.
+
 If `aegis-ops.toml` is missing (you skipped C0 step 5), create it once:
 
 ```powershell
@@ -1021,68 +1028,79 @@ Copy-Item configs\aegis-ops.example.toml configs\aegis-ops.toml
 # then edit [llm.ollama].model to match `ollama list`
 ```
 
-Defaults are pure-Ollama with empty `[splunk]` / `[audit]` — fine for
-the first run. Add Splunk tokens later if you want SPL observations and
-audit events in `index=aegis`.
+#### C3a. Wire Splunk + audit (required for Path C)
 
-Run one agent tick:
+There is **no blocker** — unlike CDTSM, Splunk REST queries and HEC
+audit work on local Enterprise. The example config leaves `[splunk]` and
+`[audit]` empty only so the agent can run in a **credential-free**
+smoke test (C1-style). **Path C expects both filled in** so the agent
+reads trends from Splunk and writes decisions to `index=aegis`.
+
+Edit `agent/configs/aegis-ops.toml`:
+
+**1. Splunk auth token** (REST API — lets agent run SPL searches):
+
+Splunk Web → **Settings** → **Tokens** → **New Token** → name
+`aegis-ops`, capability **`search`** → **Create** → copy token.
+
+**2. HEC token** — reuse the same token already in
+[`configs/aegis.toml`](../configs/aegis.toml) (`[hec].token` from Path B).
+
+**3. Paste both into the config:**
+
+```toml
+[splunk]
+url        = "https://localhost:8089"   # REST API — port 8089, not Web 8000
+token      = "YOUR-SPLUNK-AUTH-TOKEN"    # from step 1
+verify_tls = false
+
+[audit]
+hec_endpoint = "https://localhost:8088/services/collector/event"
+hec_token    = "YOUR-HEC-TOKEN"          # same as configs/aegis.toml [hec].token
+verify_tls   = false
+```
+
+Leave `cdtsm_enabled = false` — CDTSM still needs Splunk Cloud (same
+404 as dashboard forecast panels). SPL observations and audit **do**
+work locally.
+
+#### C3b. Run the agent
 
 ```powershell
+cd c:\Users\chukw\Desktop\splunk\agent
+.\.venv\Scripts\Activate.ps1
 aegis-ops run --config configs\aegis-ops.toml --once -v
 ```
 
-The first tick takes ~10 seconds (Ollama loads the model). Subsequent
-ticks are sub-second. Expected output:
+The first tick takes ~10 seconds (Ollama loads the model). Expected
+output **with Splunk + audit configured**:
 
 ```
-INFO AegisOps starting: 2 gateway(s), policy=low_risk_auto, dry_run=False, llm=ollama, splunk=off, audit=off
+INFO AegisOps starting: 2 gateway(s), policy=low_risk_auto, dry_run=False, llm=ollama, splunk=on, audit=on
 INFO [us-east] decision=noop(-) conf=0.95 exec=auto      | gateway healthy, no actionable signal
 INFO [eu-west] decision=noop(-) conf=0.95 exec=auto      | gateway healthy, no actionable signal
 ```
 
-Dry-run for prompt iteration (no actuation, no HEC):
+If you see `splunk=off, audit=off`, `[splunk].url` / `[audit].hec_token`
+are still empty — complete C3a above.
+
+**Dry-run only** (prompt debugging — skips actuation and HEC writes):
 
 ```powershell
 aegis-ops run --config configs\aegis-ops.toml --dry-run --once -v
 ```
 
-To light up **SPL observations** and **audit**, edit `[splunk]` and
-`[audit]` in `agent/configs/aegis-ops.toml`:
-
-```toml
-[splunk]
-url        = "https://localhost:8089"   # Splunk REST API (port 8089, not 8000)
-token      = "YOUR-SPLUNK-AUTH-TOKEN"    # Settings → Tokens → New Token (search capability)
-verify_tls = false                       # match your local Splunk cert setup
-
-[audit]
-hec_endpoint = "https://localhost:8088/services/collector/event"
-hec_token    = "YOUR-HEC-TOKEN"          # same token from Path B configs/aegis.toml
-verify_tls   = false
-```
-
-**Create the Splunk auth token:** Splunk Web → **Settings** (gear) →
-**Tokens** → **New Token** → name it `aegis-ops`, check **`search`**
-capability → **Create** → copy the token string into `[splunk].token`.
-
-This lets the agent query Splunk for trends and classifier stats each
-tick. It does **not** enable CDTSM on local Enterprise — leave
-`cdtsm_enabled = false` in `[observe]` unless you are on Splunk Cloud
-with CDTSM provisioned.
-
-To switch from Ollama to Splunk Hosted Models (when SLIM access is
-available), change `[llm].transport` to `"splunk_ai"`.
-
-Verify audit trail in Splunk (when `[audit]` is configured) — in
-Splunk Web (`http://localhost:8000`), open **Search & Reporting**,
-paste into the search bar, set the time range to *Last 24 hours*, and
-click **Search**:
+Verify audit trail in Splunk — **Search & Reporting**, time range *Last
+24 hours*:
 
 ```spl
 index=aegis sourcetype=aegis:agent
 | table _time, gateway, decision.action, exec_mode, decision.confidence, decision.justification
 | sort -_time
 ```
+
+To switch from Ollama to Splunk Hosted Models (when SLIM access is
+available), change `[llm].transport` to `"splunk_ai"`.
 
 See [`agent/README.md`](agent/README.md) for transport / policy
 details and [`docs/saia-integration.md`](docs/saia-integration.md) for

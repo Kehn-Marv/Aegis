@@ -18,20 +18,23 @@ node_modules/
 .turbo/
 out/
 
-# Secrets / local config
+# Secrets / local config (never commit — copy from *.example.toml)
 .env
 .env.*
 !.env.example
 configs/aegis.toml
-configs/*.local.*
-agent/configs/aegis-ops.toml
 configs/aegis-us-east.toml
 configs/aegis-eu-west.toml
+configs/*.local.*
+agent/configs/aegis-ops.toml
 
 # Splunk
 *.splunk
 *.tgz
 *.spl
+
+# Archives (not part of the repo)
+*.zip
 
 # IDE / OS
 .vscode/

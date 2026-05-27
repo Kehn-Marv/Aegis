@@ -94,12 +94,14 @@ model        = "gpt-oss:20b"    # must match the AITK default model
 timeout_secs = 30
 
 [splunk]
-url   = "https://localhost:8089"
-token = "PASTE-A-SPLUNK-AUTH-TOKEN-WITH-SEARCH-CAPABILITY"
+url        = "https://localhost:8089"
+token      = "PASTE-A-SPLUNK-AUTH-TOKEN-WITH-SEARCH-CAPABILITY"
+verify_tls = false
 ```
 
-Then `aegis-ops run --config configs/aegis-ops.toml --once -v` and look
-for this startup line:
+Then `aegis-ops --config configs/aegis-ops.toml --once -v` and look
+for this startup line. On CPU Ollama with `transport = "ollama"`, allow
+~5 minutes per gateway — see [`../Troubleshooting.md`](../Troubleshooting.md).
 
 ```
 INFO AegisOps starting: ... llm=splunk_ai splunk=on audit=...

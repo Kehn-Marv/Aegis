@@ -1,5 +1,7 @@
-# AegisOps Agent configuration.
-# Copy to `aegis-ops.toml` and (optionally) fill in Splunk + HEC creds.
+# AegisOps Agent configuration — EXAMPLE (safe to commit).
+# Copy once to `aegis-ops.toml` (gitignored) and fill in tokens:
+#
+#   Copy-Item configs\aegis-ops.example.toml configs\aegis-ops.toml
 #
 # DEFAULT SHAPE (no Splunk credentials):
 #   - LLM:        local Ollama running gpt-oss:20b (or smaller — see below)
@@ -19,6 +21,8 @@
 #                     the 14-day Cloud trial — see docs/splunk-blocker.md.
 
 [agent]
+# Minimum gap between ticks when ticks finish quickly. On CPU Ollama each
+# tick can take ~5 min — the loop waits for the tick to finish first.
 loop_interval_secs = 15
 dry_run = false
 
@@ -50,7 +54,7 @@ transport = "ollama"
 
 [llm.ollama]
 # Raw Ollama HTTP. Install: https://ollama.com/download
-# Pull the model first:  ollama pull gpt-oss:20b
+# Pull the model first:  ollama pull qwen2.5:3b  (or gpt-oss:20b on 16 GB+ RAM)
 #
 # Model recommendations by available RAM (total system RAM):
 #   - 16 GB+ RAM   ->  "gpt-oss:20b"  (matches the Splunk Hosted Models name)
@@ -58,8 +62,10 @@ transport = "ollama"
 #   - 4-6 GB RAM   ->  "gemma2:2b"    (~2 GB active; good quality)
 #   - <4 GB RAM    ->  "qwen2.5:1.5b" (~1.5 GB active; basic but functional)
 url             = "http://127.0.0.1:11434"
-model           = "gpt-oss:20b"
-timeout_secs    = 60
+model           = "qwen2.5:3b"
+# CPU-only Ollama: ~5 min per gateway. Two gateways queue on one Ollama
+# instance — keep 600+ for local Enterprise demos. GPU hosts can lower this.
+timeout_secs    = 600
 # Enforces a hard JSON schema on the model's reply via Ollama's
 # `format` parameter. Big reliability win for small models. Leave true.
 enforce_schema  = true
@@ -91,14 +97,14 @@ model        = "gpt-oss-20b"
 timeout_secs = 30
 
 # ------------------------------------------------------------------
-# Splunk observability (OPTIONAL).
+# Splunk observability (OPTIONAL for C1 smoke test; REQUIRED for Path C).
 # Leave url+token empty to skip SPL observations entirely. The agent
 # will still observe live gateway state and produce reasoned decisions.
 # ------------------------------------------------------------------
 [splunk]
-url        = ""
-token      = ""
-verify_tls = true
+url        = "https://localhost:8089"
+token      = ""          # Splunk Web -> Settings -> Tokens -> New Token (Audience: aegis-ops)
+verify_tls = false       # required for local Splunk Enterprise self-signed cert
 earliest   = "-5m"
 latest     = "now"
 
@@ -121,13 +127,13 @@ verify_tls   = true
 timeout_secs = 30
 
 # ------------------------------------------------------------------
-# Audit (OPTIONAL).
+# Audit (OPTIONAL for C1 smoke test; REQUIRED for Path C).
 # Leave hec_endpoint+hec_token empty to skip HEC; the agent will still
 # log every decision to stdout for inspection.
 # ------------------------------------------------------------------
 [audit]
-hec_endpoint   = ""
-hec_token      = ""
+hec_endpoint   = "https://localhost:8088/services/collector/event"
+hec_token      = ""      # same token as configs/aegis.toml [hec].token
 hec_index      = "aegis"
 hec_source     = "aegis:agent"
 hec_sourcetype = "aegis:agent"

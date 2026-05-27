@@ -47,6 +47,7 @@ autonomous AegisOps agent that itself uses
 * [`docs/splunk-blocker.md`](docs/splunk-blocker.md) — Splunk Hosted Models SLIM-trial blocker and the two live workarounds
 * [`apps/aegis_ai/README.md`](apps/aegis_ai/README.md) — Splunk app docs + AppInspect status
 * [`agent/README.md`](agent/README.md) — autonomous AegisOps agent (observe → reason → act)
+* [`Troubleshooting.md`](Troubleshooting.md) — symptom → fix (daemon, Splunk, agent, sidecar)
 
 It is built for two failure modes the rest of the observability stack ignores:
 
@@ -866,13 +867,14 @@ Copy-Item configs\aegis-ops.example.toml configs\aegis-ops.toml
 
 ```toml
 [llm.ollama]
-url   = "http://127.0.0.1:11434"
-model = "qwen2.5:3b"    # must match `ollama list` exactly
+url          = "http://127.0.0.1:11434"
+model        = "qwen2.5:3b"    # must match `ollama list` exactly
+timeout_secs = 600           # CPU Ollama needs ~5 min per gateway; see Troubleshooting.md
 ```
 
-   If you pulled `gpt-oss:20b`, leave the default. Splunk tokens in
-   this file come later (C3 optional section) — only the model line
-   matters for now.
+   If you pulled `gpt-oss:20b`, set `model` accordingly (GPU / 16 GB+
+   RAM recommended). Splunk tokens come later in [C3a](#c3a-wire-splunk--audit-required-for-path-c).
+   The copied file is **gitignored** — safe place for secrets later.
 
 Ollama runs as a background service after install — you do **not** need
 a dedicated terminal for it. Only the **agent** and **gateways** need
@@ -1040,8 +1042,22 @@ Edit `agent/configs/aegis-ops.toml`:
 
 **1. Splunk auth token** (REST API — lets agent run SPL searches):
 
-Splunk Web → **Settings** → **Tokens** → **New Token** → name
-`aegis-ops`, capability **`search`** → **Create** → copy token.
+Splunk Web → **Settings** → **Tokens** → **New Token**. Splunk
+Enterprise does **not** have a "Token name" field — use these instead:
+
+| Field | What to enter |
+|---|---|
+| **User** | `thebigkehn` (or your admin user — already filled) |
+| **Audience** | `aegis-ops` (this is the label — "purpose of the token") |
+| **Expiration** | Relative Time → `+365d` (or any future date you prefer) |
+| **Not Before** | Leave empty |
+
+There is no capabilities picker on this screen — the token inherits
+whatever your user role already has. **Admin** includes `search`; that
+is enough for the agent.
+
+Click **Create** → copy the string that appears in the **Token** box
+(shown once only — paste it before closing the dialog).
 
 **2. HEC token** — reuse the same token already in
 [`configs/aegis.toml`](../configs/aegis.toml) (`[hec].token` from Path B).
@@ -1052,7 +1068,7 @@ Splunk Web → **Settings** → **Tokens** → **New Token** → name
 [splunk]
 url        = "https://localhost:8089"   # REST API — port 8089, not Web 8000
 token      = "YOUR-SPLUNK-AUTH-TOKEN"    # from step 1
-verify_tls = false
+verify_tls = false                       # required for local self-signed Splunk cert
 
 [audit]
 hec_endpoint = "https://localhost:8088/services/collector/event"
@@ -1069,17 +1085,25 @@ work locally.
 ```powershell
 cd c:\Users\chukw\Desktop\splunk\agent
 .\.venv\Scripts\Activate.ps1
-aegis-ops run --config configs\aegis-ops.toml --once -v
+aegis-ops --config configs\aegis-ops.toml --once -v
 ```
 
-The first tick takes ~10 seconds (Ollama loads the model). Expected
-output **with Splunk + audit configured**:
+On **CPU-only** Ollama (`ollama ps` shows `100% CPU`), the first tick
+takes **~4–5 minutes per gateway** (~5 min total for two gateways when
+the model is warm). Ensure `[llm.ollama].timeout_secs = 600` in your
+config (the example file sets this). A quick `ollama run qwen2.5:3b
+"reply pong"` before the agent run helps warm the model.
+
+Expected output **with Splunk + audit configured**:
 
 ```
-INFO AegisOps starting: 2 gateway(s), policy=low_risk_auto, dry_run=False, llm=ollama, splunk=on, audit=on
+INFO AegisOps starting: 2 gateway(s), policy=low_risk_auto, dry_run=False, llm=ollama, splunk=on/rest, audit=on
 INFO [us-east] decision=noop(-) conf=0.95 exec=auto      | gateway healthy, no actionable signal
 INFO [eu-west] decision=noop(-) conf=0.95 exec=auto      | gateway healthy, no actionable signal
 ```
+
+Success = `conf=0.95`, not `conf=0.00`. See [`Troubleshooting.md`](Troubleshooting.md)
+if Ollama times out.
 
 If you see `splunk=off, audit=off`, `[splunk].url` / `[audit].hec_token`
 are still empty — complete C3a above.
@@ -1087,17 +1111,40 @@ are still empty — complete C3a above.
 **Dry-run only** (prompt debugging — skips actuation and HEC writes):
 
 ```powershell
-aegis-ops run --config configs\aegis-ops.toml --dry-run --once -v
+aegis-ops --config configs\aegis-ops.toml --dry-run --once -v
 ```
 
-Verify audit trail in Splunk — **Search & Reporting**, time range *Last
-24 hours*:
+#### C3c. Verify agent decisions in Splunk
+
+The SPL below runs in **Splunk Web**, not PowerShell. Same place as
+[B4c](#b4c-search-for-the-events-in-splunk).
+
+In Splunk Web (`http://localhost:8000`):
+
+1. Open **Search & Reporting** (default app; dark/green tile on the left).
+2. Paste this into the **search bar** at the top and click **Search**:
 
 ```spl
 index=aegis sourcetype=aegis:agent
-| table _time, gateway, decision.action, exec_mode, decision.confidence, decision.justification
-| sort -_time
+| sort - _time
+| table _time, gateway, decision.action, decision.confidence, decision.justification
 ```
+
+3. Set the time range to *Last 24 hours* (or *Last 15 minutes* if you
+   just ran the agent).
+
+You should see one row per gateway per agent run — e.g. `us-east` and
+`eu-west`, both `decision.action=noop` with `decision.confidence=0.95`.
+
+If you get no results, widen the time range or run this simpler check
+first:
+
+```spl
+index=aegis sourcetype=aegis:agent
+```
+
+No rows usually means the agent log did not show `audit=on` and HEC
+`200 OK` — re-check [C3a](#c3a-wire-splunk--audit-required-for-path-c).
 
 To switch from Ollama to Splunk Hosted Models (when SLIM access is
 available), change `[llm].transport` to `"splunk_ai"`.
@@ -1178,30 +1225,8 @@ guide lives in [`docs/mcp.md`](docs/mcp.md).
 
 ## Troubleshooting
 
-| Symptom | Fix |
-|---|---|
-| `cargo build` fails with a linker / `link.exe` error on Windows | Install MSVC Build Tools (the cargo error message has the link). |
-| Daemon prints `bind tcp listener at 127.0.0.1:5140 ... Os { code: 10048 ... }` | Another process is already on port 5140 (often a previous Aegis daemon you forgot to kill). `Get-Process aegis-daemon \| Stop-Process -Force`, then restart. |
-| Daemon prints `bind aegis http listener at 127.0.0.1:7321 ... already in use` | Same, but for the MCP/REST port. Edit `mcp.http_listen` in your config or kill the stale daemon. |
-| `cargo run -- --check-hec` returns `HEC rejected events: 401` | Bad or disabled HEC token. Re-issue the token in Splunk Web and update `configs/aegis.toml`. |
-| `cargo run -- --check-hec` returns a TLS error | Self-signed cert. Set `verify_tls = false` in `[hec]`. |
-| Splunk search returns nothing even though daemon says `HEC batch delivered` | Run the search in **Search & Reporting** (`http://localhost:8000`), not the HEC URL on port 8088. Check the *index* in your search matches `index=aegis` (or whatever you set). Check the time range covers when events landed. |
-| `index=aegis` returns zero events after running the B4 log spammer | 1) Confirm Terminals 1 and 2 (sidecar + daemon) are still running. 2) Re-run the spammer while both are up: `python demo\log_spammer.py --target tcp://127.0.0.1:5140 --pattern crashloop --rate 200 --duration 60`. 3) Wait ~60 seconds after it finishes so dedup metric windows can flush. 4) In **Search & Reporting**, run `index=aegis` with time range *Last 15 minutes* and click **Search**. |
-| Dashboard **AI classifier verdict** panel is empty | The sidecar only classifies **new** traffic. Follow [B4a–B4b](#b4-run-the-live-pipeline): 1) Terminal 1 — `python -m aegis_sidecar.server` (`Uvicorn running on http://127.0.0.1:8765`). 2) Terminal 2 — confirm daemon with `Invoke-RestMethod http://127.0.0.1:7321/api/status`. 3) Re-run the spammer while both are up. 4) Wait 60s. 5) Search `index=aegis sourcetype=aegis:metric "classification.label"=*` in **Search & Reporting**, then refresh the dashboard. |
-| `Invoke-RestMethod http://127.0.0.1:7321/api/status` fails | Daemon not running. Start Terminal 2: `cargo run --release --bin aegis-daemon` from the repo root; wait for `tcp ingest listening` before retrying. |
-| PSC install fails (`Winsock 10054`, `Internal Server Error`, `Package is too large`) | PSC (~800 MB) must use **CLI**, not Splunk Web. Download the `.tgz` from [Splunkbase](https://splunkbase.splunk.com/app/2883), then while Splunk is **running**: `splunk install app path\to\file.tgz -update 1 -auth user:pass` → `splunk restart`. See [B3.6 App 1](#b36-install-splunk-ai-toolkit-required--powers-cdtsm-forecast-panels). |
-| `install app` says `splunkd is unreachable` | Splunk is stopped — run `splunk start` first, wait for Splunk Web, then `install app`. |
-| AITK web Install fails | AITK is only ~30 MB — retry **Apps → Find More Apps → Splunk AI Toolkit → Install**. If it keeps failing, download from [Splunkbase](https://splunkbase.splunk.com/app/2890) and use the same CLI `install app` path as PSC. |
-| `Error in 'ai' command: User does not have permission` | Grant **`apply_ai_commander_command`** on your Splunk role: **Settings → Roles → admin → Capabilities**. See [B3.6a](#b36a-grant-ai-command-permission-one-time). |
-| `Error in 'ai' command: No default LLM configuration found` | You have not configured a default LLM in AITK Connection Management. For Path C, set up Ollama — see [B3.6c](#b36c-optional--smoke-test-ai-path-c--ollama) and [`docs/aitk-ollama.md`](docs/aitk-ollama.md). Unrelated to CDTSM. |
-| `CDTSM: Failed to retrieve tenant info: HTTP 404 Not Found` | **Expected on local Splunk Enterprise.** CDTSM is Splunk-Hosted (SLIM/Cloud only). Path B still works — 9 of 11 dashboard panels populate. See [B3.6b](#b36b-smoke-test-cdtsm-splunk-cloud-only) and [`docs/splunk-blocker.md`](docs/splunk-blocker.md). |
-| Dashboard CDTSM panels show `Unknown search command 'apply'` | AI Toolkit not installed. Complete [B3.6](#b36-install-splunk-ai-toolkit-required--powers-cdtsm-forecast-panels), restart Splunk, re-open the dashboard. On Cloud, panels also need ~15 min of `aegis:selfmetric` data. |
-| Daemon logs `self-metric emit failed` repeatedly | Splunk or HEC was temporarily unreachable (restart, sleep, network). The daemon keeps running — verify with `Invoke-RestMethod http://127.0.0.1:7321/api/status` (`online: true` = healthy). Fix Splunk/HEC: `cargo run --release --bin aegis-daemon -- --check-hec` should print `HEC ping accepted`. Re-run the spammer to refresh dashboard data. Optional: restart the daemon after Splunk is back up. |
-| `npm install` in `ui/` is slow | First install is ~1 minute (82 packages). Subsequent runs are seconds. |
-| Sidecar startup error: `ModuleNotFoundError: No module named 'aegis_sidecar'` | You're running `python server.py` directly. Use `pip install -e .` inside the `sidecar/` virtualenv, then `python -m aegis_sidecar.server`. |
-| `pip install -e .` in `sidecar/` fails with `ConnectionResetError` while downloading `torch` | Transient network drop on the ~123 MB PyTorch wheel. Run `pip install torch --index-url https://download.pytorch.org/whl/cpu` first, then `pip install -e .` again — pip reuses cached packages. The `win_amd64` in the wheel name is correct for 64-bit Windows on Intel or AMD — it does not mean you need an AMD CPU. |
-| Sidecar takes ~30 s on first `/classify` call | Lazy-loading the sentence-transformer model (~80 MB). Subsequent calls are sub-millisecond. |
-| UI shows "UNREACHABLE" badge | Daemon isn't running, or its MCP/REST port differs from `7321`. Confirm the daemon log says `Control API at 127.0.0.1:7321/api/status`. |
+See [`Troubleshooting.md`](Troubleshooting.md) for the full symptom → fix
+table (daemon, Splunk, dashboard, sidecar, AegisOps agent, secrets/git).
 
 ---
 

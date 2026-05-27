@@ -98,7 +98,8 @@ Policy is configurable in `configs/aegis-ops.toml`. Modes:
 
   ```toml
   [llm.ollama]
-  model = "qwen2.5:3b"   # or whichever you pulled
+  model        = "qwen2.5:3b"   # or whichever you pulled
+  timeout_secs = 600            # CPU Ollama: ~5 min per gateway; see ../Troubleshooting.md
   ```
 
 ### 2. Launch the agent
@@ -109,9 +110,17 @@ python -m venv .venv
 .\.venv\Scripts\Activate.ps1
 pip install -e .
 Copy-Item configs\aegis-ops.example.toml configs\aegis-ops.toml
-# (no edits needed — defaults run pure-Ollama against two local gateways)
-aegis-ops run --config configs\aegis-ops.toml --once -v
+# Edit configs\aegis-ops.toml — add Splunk + HEC tokens for Path C (see README C3a)
+aegis-ops --config configs\aegis-ops.toml --once -v
 ```
+
+`configs/aegis-ops.toml` is **gitignored** — only the example file is
+tracked. Never commit tokens.
+
+On **CPU-only** Ollama, expect **~4–5 minutes per gateway** for the
+first reasoning call. Success looks like `conf=0.95`, not `conf=0.00`.
+Use `--once` for smoke tests; continuous mode waits for each slow tick
+to finish (see `[agent].loop_interval_secs` note in the example config).
 
 You'll see one line per gateway:
 
@@ -134,12 +143,14 @@ Edit `configs/aegis-ops.toml`:
 
 ```toml
 [splunk]
-url   = "https://prd-p-XXXXX.splunkcloud.com"
-token = "paste-search-token"   # Settings -> Tokens -> New Token
+url        = "https://localhost:8089"
+token      = "paste-search-token"   # Settings -> Tokens -> New Token
+verify_tls = false                  # local Enterprise self-signed cert
 
 [audit]
 hec_endpoint = "https://localhost:8088/services/collector/event"
 hec_token    = "paste-hec-token"
+verify_tls   = false
 ```
 
 The agent now observes `index=aegis` SPL signals AND ships every
@@ -163,7 +174,7 @@ No code changes. Same prompt, same decision schema, same audit trail.
 ## Dry-run
 
 ```powershell
-aegis-ops run --config configs\aegis-ops.toml --dry-run
+aegis-ops --config configs\aegis-ops.toml --dry-run
 ```
 
 Actuator never calls any gateway and never writes to HEC. Useful for
@@ -171,14 +182,21 @@ iterating on the prompt without producing side effects.
 
 ## Audit trail in Splunk (when `[audit]` is configured)
 
+Run this in **Splunk Web** (`http://localhost:8000`), not in a terminal:
+
+1. Open **Search & Reporting**.
+2. Paste into the search bar and click **Search** (time range *Last 24
+   hours*, or *Last 15 minutes* if you just ran the agent):
+
 ```spl
 index=aegis sourcetype=aegis:agent
+| sort - _time
 | table _time, gateway, decision.action, decision.confidence, exec_mode, decision.justification
-| sort -_time
 ```
 
-Every decision the agent ever made, including the model's reasoning,
-end-to-end visible to the SRE team.
+Every decision the agent made — action, confidence, and justification —
+is visible to the SRE team. See [README C3c](../README.md#c3c-verify-agent-decisions-in-splunk)
+for expected output and empty-result fixes.
 
 <!-- Tests are intentionally not committed to this repo (see .gitignore).
      Devs adding tests locally can install dev deps with:

@@ -853,8 +853,27 @@ curl.exe http://127.0.0.1:11434/api/tags
 # should return JSON listing models
 ```
 
-5. Set the same model name in `agent/configs/aegis-ops.toml` under
-   `[llm.ollama].model` (e.g. `qwen2.5:3b` if you pulled that).
+5. Create your agent config from the template and set the model name
+   (you do this once — same pattern as `configs/aegis.toml` for the
+   daemon):
+
+```powershell
+cd agent
+Copy-Item configs\aegis-ops.example.toml configs\aegis-ops.toml
+```
+
+Open `agent/configs/aegis-ops.toml` in any editor. Find the
+`[llm.ollama]` section (~line 51) and change `model` to match what
+you pulled:
+
+```toml
+[llm.ollama]
+url   = "http://127.0.0.1:11434"
+model = "qwen2.5:3b"    # ← change this to match `ollama list`
+```
+
+If you pulled `gpt-oss:20b`, leave the default. Only edit this one
+line for now — Splunk tokens come later in C3.
 
 Ollama runs as a background service after install — you do **not** need
 a dedicated terminal for it. Only the **agent** and **gateways** need
@@ -879,31 +898,137 @@ python demo\log_spammer.py --target tcp://127.0.0.1:5142 --pattern routine --rat
 
 ### C2. Launch two gateways (live with Splunk)
 
-Stop the single B4 daemon (`Ctrl+C` in its terminal) — C2 replaces it
-with two regional gateways. **Keep the sidecar (B4 Terminal 1) and
-Splunk running.**
+C2 replaces the single B4 daemon (and any C1 demo daemons) with two
+regional gateways wired to Splunk HEC. **Splunk and the sidecar must be
+running before you start the gateways.**
+
+#### C2a. Pre-flight — confirm Splunk and sidecar are up
+
+Run these from the **repo root** (`c:\Users\chukw\Desktop\splunk`):
+
+```powershell
+# 1 — Stop C1 demo daemons if you ran them (free ports 5140/5142/7321/7322)
+Get-Process aegis-daemon -ErrorAction SilentlyContinue | Stop-Process -Force
+
+# 2 — Splunk Web (expect StatusCode 200)
+try {
+  (Invoke-WebRequest -Uri http://localhost:8000 -UseBasicParsing -TimeoutSec 5).StatusCode
+} catch { Write-Host "Splunk Web DOWN — start Splunk (step 2b below)" }
+
+# 3 — HEC ingest (expect: HEC ping accepted)
+cargo run --release --bin aegis-daemon -- --check-hec
+
+# 4 — Sidecar (expect JSON with "status":"ok" or similar)
+curl.exe http://127.0.0.1:8765/health
+```
+
+| Check | Good sign | If it fails |
+|---|---|---|
+| Splunk Web | `200` | **Start Splunk** (see below) |
+| HEC | `HEC ping accepted` | Splunk stopped, or bad token in `configs/aegis.toml` |
+| Sidecar | HTTP 200 from `/health` | **Start sidecar** (see below) |
+
+**Start Splunk** (if Web check failed):
+
+```powershell
+& "C:\Program Files\Splunk\bin\splunk.exe" start
+# wait ~30s, then open http://localhost:8000 in a browser
+```
+
+**Start sidecar** (if `/health` connection refused) — **Terminal 1**, leave open:
+
+```powershell
+cd sidecar
+.\.venv\Scripts\Activate.ps1
+python -m aegis_sidecar.server
+# expect: Uvicorn running on http://127.0.0.1:8765
+```
+
+Also stop the old **single B4 daemon** if it is still running (`Ctrl+C`
+in its terminal). C2 uses the same ports for us-east (5140 / 7321).
+
+#### C2b. Create regional configs and start gateways
+
+Copy the same HEC token from your working Path B config
+([`configs/aegis.toml`](configs/aegis.toml)) into both regional files:
 
 ```powershell
 Copy-Item configs\aegis.us-east.example.toml configs\aegis-us-east.toml
 Copy-Item configs\aegis.eu-west.example.toml configs\aegis-eu-west.toml
-# Fill in HEC tokens in both files (host is already us-east / eu-west)
+# Edit both files: replace PUT-YOUR-HEC-TOKEN-HERE with your real HEC token
+```
 
-# Terminal 2 (was B4 daemon terminal)
+**Terminal 2** (us-east):
+
+```powershell
 cargo run --release --bin aegis-daemon -- --config configs\aegis-us-east.toml
+```
 
-# Terminal 4 (new)
+**Terminal 4** (eu-west — new window):
+
+```powershell
 cargo run --release --bin aegis-daemon -- --config configs\aegis-eu-west.toml
 ```
 
+Verify both:
+
+```powershell
+Invoke-RestMethod http://127.0.0.1:7321/api/status
+Invoke-RestMethod http://127.0.0.1:7322/api/status
+```
+
+Send traffic (same as C1, but now events land in Splunk with regional
+`host=us-east` / `host=eu-west`):
+
+```powershell
+python demo\log_spammer.py --target tcp://127.0.0.1:5140 --pattern crashloop --rate 50 --duration 10
+python demo\log_spammer.py --target tcp://127.0.0.1:5142 --pattern routine --rate 200 --duration 10
+```
+
 ### C3. Configure and run the AegisOps agent
+
+**Prerequisites:** C0 step 5 (agent config) and C2 (both gateways running).
+Ollama must be running with the model named in your config.
+
+One-time Python install (skip if you already ran this):
 
 ```powershell
 cd agent
 python -m venv .venv
 .\.venv\Scripts\Activate.ps1
 pip install -e .
+```
+
+**Agent config — verify, don't blindly re-copy.** You created
+`agent/configs/aegis-ops.toml` in [C0 step 5](#c0-install-ollama-one-time)
+when you set `[llm.ollama].model` (e.g. `qwen2.5:3b`). **Do not run
+`Copy-Item` again** — that would overwrite your edits.
+
+Confirm before running:
+
+```powershell
+# File exists?
+Test-Path configs\aegis-ops.toml
+
+# Model matches what Ollama has? (compare the two outputs)
+ollama list
+Select-String -Path configs\aegis-ops.toml -Pattern '^model\s*='
+```
+
+If `aegis-ops.toml` is missing (you skipped C0 step 5), create it once:
+
+```powershell
 Copy-Item configs\aegis-ops.example.toml configs\aegis-ops.toml
-# (Defaults are pure-Ollama, zero Splunk creds. Edit only to add Splunk.)
+# then edit [llm.ollama].model to match `ollama list`
+```
+
+Defaults are pure-Ollama with empty `[splunk]` / `[audit]` — fine for
+the first run. Add Splunk tokens later if you want SPL observations and
+audit events in `index=aegis`.
+
+Run one agent tick:
+
+```powershell
 aegis-ops run --config configs\aegis-ops.toml --once -v
 ```
 

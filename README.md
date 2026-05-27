@@ -853,27 +853,26 @@ curl.exe http://127.0.0.1:11434/api/tags
 # should return JSON listing models
 ```
 
-5. Create your agent config from the template and set the model name
-   (you do this once — same pattern as `configs/aegis.toml` for the
-   daemon):
+5. **Create your agent config** (one-time — same idea as copying
+   `aegis.example.toml` → `aegis.toml` in Path B). Run:
 
 ```powershell
-cd agent
+cd c:\Users\chukw\Desktop\splunk\agent
 Copy-Item configs\aegis-ops.example.toml configs\aegis-ops.toml
 ```
 
-Open `agent/configs/aegis-ops.toml` in any editor. Find the
-`[llm.ollama]` section (~line 51) and change `model` to match what
-you pulled:
+   Then open `agent/configs/aegis-ops.toml` and set `[llm.ollama].model`
+   to match what you pulled in step 3 (check with `ollama list`):
 
 ```toml
 [llm.ollama]
 url   = "http://127.0.0.1:11434"
-model = "qwen2.5:3b"    # ← change this to match `ollama list`
+model = "qwen2.5:3b"    # must match `ollama list` exactly
 ```
 
-If you pulled `gpt-oss:20b`, leave the default. Only edit this one
-line for now — Splunk tokens come later in C3.
+   If you pulled `gpt-oss:20b`, leave the default. Splunk tokens in
+   this file come later (C3 optional section) — only the model line
+   matters for now.
 
 Ollama runs as a background service after install — you do **not** need
 a dedicated terminal for it. Only the **agent** and **gateways** need

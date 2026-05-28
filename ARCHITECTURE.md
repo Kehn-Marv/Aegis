@@ -176,18 +176,6 @@ All planes share one Tokio runtime. Cloning a `Control` or a `Queue` is
 free (an `Arc` bump); the MCP server's `latest_decision` tool reads the
 same in-memory snapshot the React UI polls on `/api/status.decision`.
 
-## Splunk integration touchpoints
-
-| Capability               | How Aegis uses it                                                                                                            | Targeted prize                 |
-|--------------------------|------------------------------------------------------------------------------------------------------------------------------|---------------------------------|
-| **HEC**                  | Primary egress. Seven sourcetypes (`raw`, `metric`, `summary`, `causal`, `decision`, `incident`, `silent`) plus `selfmetric` | Best of Observability           |
-| **MCP Server v1.1+**     | Aegis is on both sides: own MCP server (8 tools) + AegisOps Agent is a real MCP client of `splunk_run_query`                | Best Use of Splunk MCP Server   |
-| **AI Toolkit `\| ai`**   | Three live LLM transports (`ollama`, `aitk_ollama`, `splunk_ai`); one config flag switches between them                     | Best Use of Splunk Hosted Models |
-| **Hosted Models**        | Default Ollama model name (`gpt-oss:20b`) matches the Hosted Models identifier; flips to true Hosted Models with one env var | Best Use of Splunk Hosted Models |
-| **CDTSM**                | Dashboard forecast panels + agent feedback loop                                                                              | Best Use of Splunk Hosted Models |
-| **`splunklib.ai`**       | Custom Alert Action + Custom Search Command, AppInspect clean                                                                | Best Use of Splunk Developer Tools |
-| **Dashboard Studio**     | Single dashboard rendering all four pillars + FinOps + CDTSM                                                                 | Best of Observability           |
-
 ## Data flows
 
 * **Ingest** — TCP and UDP listeners feed an `mpsc<IngestLine>`.

@@ -4,7 +4,7 @@ Two transports, tried in order when `classify()` runs:
 
 1. **Splunk AI Toolkit (`| ai`)** — preferred. Set `AEGIS_SPLUNK_URL` and
    `AEGIS_SPLUNK_TOKEN`. This is the same integration path the AegisOps
-   agent uses and satisfies the hackathon's Hosted Models prize track.
+   agent uses.
 2. **OpenAI-compatible chat-completions** — fallback for local dev with
    vLLM, TGI, or Ollama. Set `AEGIS_HOSTED_MODEL_URL`.
 

@@ -249,6 +249,11 @@ python demo\log_spammer.py --target tcp://127.0.0.1:5140 --pattern cascade
 # (or --pattern crashloop --rate 200 --duration 60 for the FinOps story)
 ```
 
+When you are done exploring Path B, **stop the B5 daemon** (Ctrl+C in
+Terminal 2). It holds ports **5140** and **7321** that Path C needs for
+the us-east gateway. If you skip this and later see
+`bind ... already in use`, see [Port already in use](Troubleshooting.md#port-already-in-use-windows) in `Troubleshooting.md`.
+
 In Splunk Web, **Search & Reporting** with time range *Last 15 minutes*:
 
 ```spl
@@ -302,6 +307,10 @@ Complete Path B first. Then add Ollama and the agent:
 ollama pull qwen2.5:3b      # ~3 GB RAM. For 16 GB+ machines: ollama pull gpt-oss:20b
 
 # C2 - two regional gateways
+# Stop any daemon still running from Path B5 (same ports as us-east):
+Get-Process aegis-daemon -ErrorAction SilentlyContinue | Stop-Process -Force
+# Or find the PID:  Get-NetTCPConnection -LocalPort 7321 | Select OwningProcess
+
 Copy-Item configs\aegis.us-east.example.toml configs\aegis-us-east.toml
 Copy-Item configs\aegis.eu-west.example.toml configs\aegis-eu-west.toml
 # edit both files: paste your HEC token
@@ -315,10 +324,11 @@ python -m venv .venv
 .\.venv\Scripts\Activate.ps1
 pip install -e .
 Copy-Item configs\aegis-ops.example.toml configs\aegis-ops.toml
-# edit configs\aegis-ops.toml: set [llm.ollama].model to what you pulled,
-# paste Splunk + HEC tokens
+# edit configs\aegis-ops.toml: set model = " " under [llm.ollama] to what you pulled, e.g (model = "qwen2.5:3b")
+# paste Splunk + HEC tokens under [splunk] & [audit] respectively.
 
-aegis-ops --config configs\aegis-ops.toml --once -v
+aegis-ops --config configs\aegis-ops.toml --once -v   # Run the agent once, then exits (smoke test)
+aegis-ops --config configs\aegis-ops.toml -v            # Runs continuously until you press Ctrl+C
 ```
 
 What the agent does each tick:

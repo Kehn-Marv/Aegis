@@ -6,11 +6,33 @@ Symptom → fix reference. Setup steps live in [`README.md`](README.md).
 
 ## Daemon / Rust
 
+### Port already in use (Windows)
+
+When the daemon exits right after `bind ... already in use` (and you may see
+`task panicked task="dedup"`), another process — usually a stale
+`aegis-daemon` — still holds that port. In PowerShell:
+
+```powershell
+# 1. Find which PID owns the port (swap 7321 for 5140, 5141, 5142, 7322, …)
+Get-NetTCPConnection -LocalPort 7321 -ErrorAction SilentlyContinue |
+  Select-Object LocalPort, State, OwningProcess
+
+# 2. Kill that PID (replace 14936 with OwningProcess from step 1)
+Stop-Process -Id 14936 -Force
+
+# Or stop every aegis-daemon at once, then restart:
+Get-Process aegis-daemon -ErrorAction SilentlyContinue | Stop-Process -Force
+```
+
+Path C ports: **us-east** → `5140` / `7321`; **eu-west** → `5142` / `7322`.
+To run both regions, each port must be free — do not start a second daemon on
+ports the first one still owns.
+
 | Symptom | Fix |
 |---|---|
 | `cargo build` fails with a linker / `link.exe` error on Windows | Install MSVC Build Tools (the cargo error message has the link). |
-| Daemon prints `bind tcp listener at 127.0.0.1:5140 ... already in use` | Another process is already on port 5140 (often a stale daemon). `Get-Process aegis-daemon \| Stop-Process -Force`, then restart. |
-| Daemon prints `bind aegis http listener at 127.0.0.1:7321 ... already in use` | Same, but for the MCP/REST port. Edit `mcp.http_listen` in your config or kill the stale daemon. |
+| Daemon prints `bind tcp listener at 127.0.0.1:5140 ... already in use` | Stale process on the ingest port. Use [Port already in use](#port-already-in-use-windows) above, then restart. |
+| Daemon prints `bind aegis http listener at 127.0.0.1:7321 ... already in use` | Stale process on the MCP/REST port. Use [Port already in use](#port-already-in-use-windows) above, or change `mcp.http_listen` in the regional config (eu-west uses `7322`). |
 | `cargo run -- --check-hec` returns `HEC rejected events: 401` | Bad or disabled HEC token. Re-issue in Splunk Web and update `configs/aegis.toml`. |
 | `cargo run -- --check-hec` returns a TLS error | Self-signed cert. Set `verify_tls = false` in `[hec]`. |
 | Daemon logs `self-metric emit failed` repeatedly | Splunk or HEC briefly unreachable. The daemon keeps running; verify with `Invoke-RestMethod http://127.0.0.1:7321/api/status` (`online: true`). |
@@ -78,6 +100,7 @@ Symptom → fix reference. Setup steps live in [`README.md`](README.md).
 
 | Symptom | Fix |
 |---|---|
+| Browser shows `NET::ERR_CERT_AUTHORITY_INVALID` on `https://localhost:8089` | Expected for local Splunk's self-signed cert. **Do not** point `[splunk].url` at port **8000** (that is Web UI only). Use `https://localhost:8089` with `verify_tls = false` in `agent/configs/aegis-ops.toml`. Seeing "Splunk Atom Feed: splunkd" after Proceed means 8089 is up. Create tokens in Splunk Web on **8000**; the agent still talks to **8089**. |
 | Agent log `CERTIFICATE_VERIFY_FAILED` on port 8089 | Set `[splunk] verify_tls = false` in `agent/configs/aegis-ops.toml`. |
 | Agent log `ollama call failed` / `conf=0.00` | On CPU-only Ollama, the first call can take several minutes per gateway. Set `[llm.ollama] timeout_secs = 600` and warm the model first (`ollama run qwen2.5:3b "reply pong"`). |
 | Agent two gateways: one succeeds, one times out | Ollama serializes requests on CPU. Expect ~5 min total wall clock for two gateways. |

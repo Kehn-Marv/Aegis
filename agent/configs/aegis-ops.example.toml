@@ -100,11 +100,18 @@ timeout_secs = 30
 # Splunk observability (OPTIONAL for C1 smoke test; REQUIRED for Path C).
 # Leave url+token empty to skip SPL observations entirely. The agent
 # will still observe live gateway state and produce reasoned decisions.
+#
+# Ports (do not mix them up):
+#   8000 — Splunk Web UI in the browser (where you create tokens).
+#   8089 — Splunk management REST API (what aegis-ops calls for SPL).
+# Opening https://localhost:8089 in Chrome shows NET::ERR_CERT_AUTHORITY_INVALID
+# and "Splunk Atom Feed: splunkd" after Proceed — that is normal. The agent
+# does not use the browser; keep url on 8089 and verify_tls = false below.
 # ------------------------------------------------------------------
 [splunk]
 url        = "https://localhost:8089"
-token      = ""          # Splunk Web -> Settings -> Tokens -> New Token (Audience: aegis-ops)
-verify_tls = false       # required for local Splunk Enterprise self-signed cert
+token      = ""          # Splunk Web (port 8000) -> Settings -> Tokens -> New Token (Audience: aegis-ops)
+verify_tls = false       # required for local Splunk Enterprise self-signed cert on 8089
 earliest   = "-5m"
 latest     = "now"
 

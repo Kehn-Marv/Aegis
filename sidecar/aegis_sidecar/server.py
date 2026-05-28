@@ -14,6 +14,7 @@ import time
 from typing import Literal
 
 import uvicorn
+from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from pydantic import BaseModel, Field
 
@@ -24,7 +25,23 @@ from .embeddings import Embedder
 logging.basicConfig(level=os.environ.get("AEGIS_LOG_LEVEL", "INFO"))
 log = logging.getLogger("aegis.sidecar")
 
-app = FastAPI(title="Aegis Sidecar", version="0.2.0")
+
+@asynccontextmanager
+async def lifespan(_app: FastAPI):
+    """Preload the embedding model so the gateway's first classify calls
+    succeed within its 6s HTTP timeout. Without this, the AI classifier
+    dashboard panel stays empty on the first demo run."""
+    log.info("warming up classifier (first load may take ~30s)...")
+    t0 = time.perf_counter()
+    get_classifier().classify("ERROR warmup probe for model load")
+    log.info(
+        "classifier ready in %.1fs",
+        time.perf_counter() - t0,
+    )
+    yield
+
+
+app = FastAPI(title="Aegis Sidecar", version="0.2.0", lifespan=lifespan)
 
 _classifier: Classifier | None = None
 

@@ -71,8 +71,9 @@ Copy-Item configs\aegis-ops.example.toml configs\aegis-ops.toml
 #    (configs/aegis.demo.toml works without Splunk)
 .\..\target\debug\aegis-daemon.exe --config ..\configs\aegis.demo.toml
 
-# 5. Run the agent once
-aegis-ops --config configs\aegis-ops.toml --once -v
+# 5. Run the agent
+aegis-ops --config configs\aegis-ops.toml --once -v   # Run the agent once, then exits (smoke test)
+aegis-ops --config configs\aegis-ops.toml -v            # Runs continuously until you press Ctrl+C
 ```
 
 On **CPU-only Ollama** the first reasoning call takes ~4–5 minutes per

@@ -307,9 +307,7 @@ Complete Path B first. Then add Ollama and the agent:
 ollama pull qwen2.5:3b      # ~3 GB RAM. For 16 GB+ machines: ollama pull gpt-oss:20b
 
 # C2 - two regional gateways
-# Stop any daemon still running from Path B5 (same ports as us-east):
-Get-Process aegis-daemon -ErrorAction SilentlyContinue | Stop-Process -Force
-# Or find the PID:  Get-NetTCPConnection -LocalPort 7321 | Select OwningProcess
+# Stop any daemon still running from Path B5 (same ports as us-east)
 
 Copy-Item configs\aegis.us-east.example.toml configs\aegis-us-east.toml
 Copy-Item configs\aegis.eu-west.example.toml configs\aegis-eu-west.toml

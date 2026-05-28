@@ -65,6 +65,7 @@ You will receive:
     * count                  - how many raw lines were collapsed
     * window_secs            - width of the dedup window in seconds
     * sample                 - a redacted sample of the original log line
+    * service                - service name extracted from the line (since v0.2)
     * classification.label   - anomaly | routine | unknown
     * classification.confidence - 0..1
     * classification.strategy   - splunk_ai | openai_compat | embedding_distance | keyword
@@ -72,7 +73,9 @@ You will receive:
 You MUST respond with a single JSON object matching the schema you've been
 given. No commentary, no markdown, no surrounding text. Be conservative:
 recommend `override` only when there is strong reason to suspect an active
-incident that the on-call needs raw logs for.
+incident that the on-call needs raw logs for. Prefer `diagnostic` or `noop`
+when in doubt; Aegis's own decision card (sourcetype=aegis:decision) is the
+authoritative source for what to do next.
 """
 
 

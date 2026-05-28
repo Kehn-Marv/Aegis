@@ -38,11 +38,11 @@ function Tile({ label, value, sublabel, accent = "neutral" }: TileProps) {
 const NUMFMT = new Intl.NumberFormat("en-US");
 
 export function StatusTiles({ status }: Props) {
-  const dedupPct = status ? status.dedup_savings_pct.toFixed(2) + "%" : "—";
+  const dedupPct = status ? status.dedup_savings_pct.toFixed(1) + "%" : "—";
   const eventsIn = status ? NUMFMT.format(status.events_in) : "—";
   const eventsOut = status ? NUMFMT.format(status.events_out) : "—";
   const queue = status ? NUMFMT.format(status.queue_depth) : "—";
-  const sigs = status ? NUMFMT.format(status.unique_signatures) : "—";
+  const memory = status ? NUMFMT.format(status.incidents_remembered) : "—";
 
   const dedupAccent: TileProps["accent"] = status
     ? status.dedup_savings_pct > 80
@@ -51,18 +51,11 @@ export function StatusTiles({ status }: Props) {
         ? "warn"
         : "neutral"
     : "neutral";
-  const queueAccent: TileProps["accent"] = status
-    ? status.queue_depth === 0
-      ? "good"
-      : status.queue_depth < 1_000
-        ? "warn"
-        : "bad"
-    : "neutral";
 
   return (
     <section className="grid grid-cols-1 gap-4 px-6 py-6 md:grid-cols-3">
       <Tile
-        label="Dedup Savings"
+        label="Noise Stopped"
         value={dedupPct}
         sublabel={status ? `${eventsIn} in → ${eventsOut} out` : "waiting…"}
         accent={dedupAccent}
@@ -70,19 +63,22 @@ export function StatusTiles({ status }: Props) {
       <Tile
         label="Queue Depth"
         value={queue}
-        sublabel="buffered events waiting for HEC"
-        accent={queueAccent}
+        sublabel="events waiting for Splunk"
+        accent={
+          status
+            ? status.queue_depth === 0
+              ? "good"
+              : status.queue_depth < 1_000
+                ? "warn"
+                : "bad"
+            : "neutral"
+        }
       />
       <Tile
-        label="Unique Signatures"
-        value={sigs}
-        sublabel={
-          status
-            ? `${status.override_active ? "override active · " : ""}${
-                status.diagnostic_active ? "diagnostic active" : ""
-              }` || "open in current dedup window"
-            : "—"
-        }
+        label="Incidents Remembered"
+        value={memory}
+        sublabel="fingerprints in local memory"
+        accent={status && status.incidents_remembered > 0 ? "good" : "neutral"}
       />
     </section>
   );

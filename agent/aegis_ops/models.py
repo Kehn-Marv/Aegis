@@ -18,6 +18,8 @@ ExecMode = Literal["auto", "recommend", "blocked"]
 class GatewayStatus(BaseModel):
     """Snapshot returned by an Aegis gateway's `/api/status` endpoint."""
 
+    model_config = {"extra": "ignore"}
+
     uptime_secs: int
     online: bool
     override_active: bool
@@ -27,6 +29,10 @@ class GatewayStatus(BaseModel):
     events_out: int
     dedup_savings_pct: float
     unique_signatures: int
+    # Fields added in Aegis v0.2 (four-pillar rewrite). Tolerated as
+    # optional so old gateways still work with new agents.
+    state: str = "green"
+    incidents_remembered: int = 0
 
 
 class TopSignature(BaseModel):
@@ -69,6 +75,27 @@ class CdtsmForecast(BaseModel):
     confidence_band_pct: int = 90
 
 
+class CausalChainSummary(BaseModel):
+    """Compact summary of the most recent causal chain the gateway detected."""
+
+    chain_id: str
+    root_cause_service: str
+    confidence: float
+    services: list[str] = Field(default_factory=list)
+    headline: str | None = None
+
+
+class IncidentMatchSummary(BaseModel):
+    """One similar past incident the gateway surfaced in its decision card."""
+
+    incident_id: str
+    similarity: float
+    past_root_cause_service: str
+    past_cause: str | None = None
+    past_fix: str | None = None
+    past_resolved_in_minutes: int | None = None
+
+
 class Observation(BaseModel):
     """Everything the reasoner needs to know about one gateway at one tick."""
 
@@ -82,6 +109,10 @@ class Observation(BaseModel):
     trends: Trends = Field(default_factory=Trends)
     forecasts: list[CdtsmForecast] = Field(default_factory=list)
     notes: list[str] = Field(default_factory=list)
+    # New in v0.2: surface the gateway's own decision card + memory matches
+    # so the LLM has them in context without re-deriving from SPL.
+    causal_chain: CausalChainSummary | None = None
+    similar_past_incidents: list[IncidentMatchSummary] = Field(default_factory=list)
 
 
 class Decision(BaseModel):

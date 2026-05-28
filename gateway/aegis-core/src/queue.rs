@@ -210,6 +210,7 @@ mod tests {
             line: line.into(),
             ts: 1.0,
             source: "t".into(),
+            service: "test-svc".into(),
         }
     }
 
@@ -222,6 +223,7 @@ mod tests {
             last_seen: 31.0,
             sample: "boom".into(),
             source: "t".into(),
+            service: "test-svc".into(),
             classification: None,
         }
     }

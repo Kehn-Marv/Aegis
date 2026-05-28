@@ -1,7 +1,9 @@
 # Demo config used for the in-terminal walkthrough.
-# Short dedup window so window-close events are visible in seconds.
-# No [hec] section -> daemon falls back to the stderr sink so you can SEE
-# every event the gateway would have sent to Splunk.
+#
+# No [hec] block → daemon falls back to the stderr sink so every event the
+# gateway would have shipped to Splunk prints to your terminal instead.
+# Short dedup + causal windows so multi-service incidents fire in seconds
+# instead of minutes.
 
 [ingest]
 tcp_listen = "127.0.0.1:5140"
@@ -15,3 +17,26 @@ http_listen = "127.0.0.1:7321"
 
 [sidecar]
 enabled = false
+
+[causal]
+window_secs   = 30
+min_services  = 3
+cooldown_secs = 30
+
+[memory]
+path           = "data/aegis-incidents.demo.sqlite"
+top_matches    = 3
+min_similarity = 0.25
+
+[decision]
+idle_to_green_secs = 30
+
+[silence]
+silence_secs = 60
+sweep_secs   = 5
+enabled      = true
+
+[services]
+"payment-api"  = "Handles all transaction processing."
+"checkout"     = "Customer-facing checkout flow."
+"orders"       = "Order fulfilment pipeline."

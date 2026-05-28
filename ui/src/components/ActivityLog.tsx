@@ -14,8 +14,10 @@ interface Props {
 
 function formatTime(ts: number) {
   const d = new Date(ts);
-  return d.toTimeString().slice(0, 8) + "." +
-    String(d.getMilliseconds()).padStart(3, "0");
+  return (
+    d.toTimeString().slice(0, 8) + "." +
+    String(d.getMilliseconds()).padStart(3, "0")
+  );
 }
 
 export function ActivityLog({ entries }: Props) {
@@ -24,7 +26,7 @@ export function ActivityLog({ entries }: Props) {
       <div className="rounded-lg border border-slate-800/80 bg-slate-900/40 p-5">
         <div className="flex items-center justify-between">
           <div className="text-[11px] uppercase tracking-widest text-slate-400">
-            Activity Log
+            Activity
           </div>
           <div className="text-[11px] font-mono text-slate-500">
             {entries.length} event{entries.length === 1 ? "" : "s"}
@@ -33,7 +35,7 @@ export function ActivityLog({ entries }: Props) {
         <div className="mt-3 max-h-72 overflow-y-auto font-mono text-xs leading-6 text-slate-300">
           {entries.length === 0 && (
             <div className="text-slate-500">
-              Waiting for activity… status polls every 2 seconds.
+              Waiting for activity — status polls every 2 seconds.
             </div>
           )}
           {entries.map((e) => (

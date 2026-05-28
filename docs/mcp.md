@@ -16,16 +16,26 @@ AegisOps consumes Splunk's official MCP tools to ground its reasoning.
 
 ## Aegis MCP Server — tools published
 
-The Aegis daemon hosts a Model Context Protocol server that exposes five
-tools any MCP-aware AI agent can call:
+The Aegis daemon hosts a Model Context Protocol server that exposes
+eight tools any MCP-aware AI agent can call:
 
-| Tool          | Description                                                        |
-|---------------|--------------------------------------------------------------------|
-| `status`      | Live snapshot: queue depth, dedup ratio, online flag, uptime, etc. |
-| `reset`       | Clear the priority queue and in-memory dedup counters              |
-| `diagnostic`  | Enable verbose tracing at the edge for N seconds                   |
-| `override`    | Disable compression and stream raw logs to HEC for N seconds       |
-| `replay_raw`  | Re-emit buffered raw events for a given unix-time window           |
+| Tool                 | Description                                                                  |
+|----------------------|------------------------------------------------------------------------------|
+| `status`             | Live snapshot: dedup ratio, queue depth, health state (green/orange/red), latest decision card |
+| `latest_decision`    | The current decision card the engineer should be looking at, or `null`       |
+| `recent_incidents`   | Top-N fingerprints from Aegis's incident memory                              |
+| `resolve_incident`   | Attach a cause + fix resolution card to an incident in memory                |
+| `acknowledge`        | Mark the current decision as 'I'm on it' (no production side effects)        |
+| `reset`              | Clear the priority queue, dedup counters, and the current decision card     |
+| `diagnostic`         | Enable verbose tracing at the edge for N seconds (bounded window)            |
+| `override`           | Disable compression and stream raw logs to HEC for N seconds (bounded)       |
+| `replay_raw`         | Re-emit buffered raw events for a given unix-time window (currently a stub)  |
+
+The three highlighted tools (`latest_decision`, `recent_incidents`,
+`resolve_incident`) are new in Aegis v0.2 and make the agent a real
+participant in the incident-memory loop. An AI agent can read the
+current card, look up past matches, attach a fix the engineer dictated
+in chat, and Aegis remembers — same flow as the React UI uses.
 
 Two transports are supported. **Use the HTTP transport** for the demo —
 it's the one that lets your AI agent control the *running* daemon with

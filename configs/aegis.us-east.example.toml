@@ -3,19 +3,19 @@
 # Set [hec].host = "us-east" so Splunk queries can filter by region.
 
 [hec]
-endpoint    = "https://localhost:8088/services/collector/event"
-token       = "PUT-YOUR-HEC-TOKEN-HERE"
-index       = "aegis"
-host        = "us-east"
+endpoint     = "https://localhost:8088/services/collector/event"
+token        = "PUT-YOUR-HEC-TOKEN-HERE"
+index        = "aegis"
+host         = "us-east"
 timeout_secs = 10
-verify_tls  = false
+verify_tls   = false
 
 [ingest]
 tcp_listen = "127.0.0.1:5140"
 udp_listen = "127.0.0.1:5141"
 
 [dedup]
-window_secs = 60
+window_secs         = 60
 max_open_signatures = 4096
 
 [queue]
@@ -30,3 +30,26 @@ http_listen = "127.0.0.1:7321"
 
 [summary]
 enabled = true
+
+[causal]
+window_secs   = 60
+min_services  = 3
+cooldown_secs = 300
+
+[memory]
+path           = "data/us-east-incidents.sqlite"
+top_matches    = 3
+min_similarity = 0.25
+
+[decision]
+idle_to_green_secs = 300
+
+[silence]
+silence_secs = 120
+sweep_secs   = 10
+enabled      = true
+
+[services]
+"payment-api"  = "Handles all transaction processing."
+"checkout"     = "Customer-facing checkout flow."
+"orders"       = "Order fulfilment pipeline."

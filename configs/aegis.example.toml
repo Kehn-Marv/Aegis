@@ -2,55 +2,109 @@
 # Copy to `aegis.toml` and fill in the secrets before running.
 
 [hec]
-endpoint    = "https://localhost:8088/services/collector/event"
-token       = "PUT-YOUR-HEC-TOKEN-HERE"
-index       = "aegis"
-host        = "aegis-edge-01"
+endpoint     = "https://localhost:8088/services/collector/event"
+token        = "PUT-YOUR-HEC-TOKEN-HERE"
+index        = "aegis"
+host         = "aegis-edge-01"
 timeout_secs = 10
-verify_tls  = false
+verify_tls   = false
 
 [ingest]
-# Listen for raw logs on these sockets.
 tcp_listen = "0.0.0.0:5140"
 udp_listen = "0.0.0.0:5141"
-# Optional list of files to tail.
 tail_files = []
 
+# How long Aegis holds an open signature before flushing it as a metric.
+# Lower values feel snappier in demos; production typically runs 30-60s.
 [dedup]
-# How long to keep a signature open for collapsing before flushing its metric.
-window_secs = 60
-# Maximum number of open signatures before forcing the oldest to flush.
+window_secs         = 30
 max_open_signatures = 4096
 
+# Routine-traffic rollup. Requires `[sidecar] enabled = true` so the
+# classifier can flag the routine half. Off by default; collapsed events
+# already carry the bulk of the FinOps story.
 [summary]
-# When true, `Collapsed` events whose AI classification is `routine` are
-# suppressed and rolled into periodic `Summary` events under
-# sourcetype=aegis:summary. Requires the [sidecar] block to be enabled
-# so classifications are available.
-enabled     = false
-batch_size  = 500
-flush_secs  = 30
+enabled    = false
+batch_size = 500
+flush_secs = 30
 
 [queue]
-# Path to the SQLite buffer used for offline / priority queueing.
-path                = "data/aegis-queue.sqlite"
-max_disk_bytes      = 1073741824   # 1 GiB
+path                   = "data/aegis-queue.sqlite"
+max_disk_bytes         = 1073741824    # 1 GiB
 priority_anomaly_first = true
 
 [sidecar]
-# URL of the Python AI sidecar (embeddings, clustering, hosted-model adapter).
-url        = "http://127.0.0.1:8765"
-# Set to false to bypass the sidecar entirely (hash-only dedup).
-enabled    = true
+url     = "http://127.0.0.1:8765"
+enabled = true
 
 [self_metrics]
-# Dedicated source for Aegis's own performance telemetry.
-source      = "aegis:self"
-sourcetype  = "aegis:selfmetric"
-flush_secs  = 15
+source     = "aegis:self"
+sourcetype = "aegis:selfmetric"
+flush_secs = 15
 
 [mcp]
-# Streamable-HTTP MCP endpoint that external AI agents (Cursor, Claude
-# Desktop, custom orchestrators) connect to. The MCP path is
-# `http://{http_listen}/mcp`. Leave blank/omit to disable HTTP MCP.
 http_listen = "127.0.0.1:7321"
+
+# ────────────────────────────────────────────────────────────────────────────
+# Causal chain detection — *find what broke first*
+#
+#   When ≥ `min_services` distinct services first-fire a new signature
+#   inside `window_secs`, Aegis emits a CausalChain pointing at whichever
+#   service broke earliest. `cooldown_secs` suppresses re-emission so a
+#   long incident produces one chain, not one chain per dedup window.
+# ────────────────────────────────────────────────────────────────────────────
+[causal]
+window_secs   = 60
+min_services  = 3
+cooldown_secs = 300
+
+# ────────────────────────────────────────────────────────────────────────────
+# Incident memory — *remembers every incident your team ever had*
+#
+#   Every chain gets fingerprinted and stored locally. When a similar
+#   incident happens again, Aegis surfaces the past cause + fix on the
+#   decision card. `min_similarity` is the floor below which past
+#   incidents are not surfaced (0.0–1.0).
+# ────────────────────────────────────────────────────────────────────────────
+[memory]
+path           = "data/aegis-incidents.sqlite"
+top_matches    = 3
+min_similarity = 0.25
+
+# ────────────────────────────────────────────────────────────────────────────
+# Decision card — *one clear moment for the engineer*
+#
+#   The card stays red while a chain is fresh; after `idle_to_green_secs`
+#   of quiet, Aegis flips the badge back to green automatically.
+# ────────────────────────────────────────────────────────────────────────────
+[decision]
+idle_to_green_secs = 300
+
+# ────────────────────────────────────────────────────────────────────────────
+# Silent-service detector — absence of events is itself a signal
+#
+#   A service that's been talking and suddenly stops gets flagged after
+#   `silence_secs` of quiet. Set `enabled = false` for batch pipelines
+#   whose services come and go on schedule.
+# ────────────────────────────────────────────────────────────────────────────
+[silence]
+silence_secs = 120
+sweep_secs   = 10
+enabled      = true
+
+# Optional: pin known sources to known services. Useful when the log lines
+# don't carry a `LEVEL service:` prefix and you want deterministic service
+# tagging anyway.
+#
+# [source_to_service]
+# "tcp://10.0.4.12:5140" = "us-east-payment"
+
+# Optional: business-impact text per service. Surfaces verbatim on the
+# decision card so on-call engineers see why this service matters without
+# hunting for context.
+[services]
+"payment-api"  = "Handles all transaction processing."
+"checkout"     = "Customer-facing checkout flow."
+"orders"       = "Order fulfilment pipeline."
+"auth"         = "Authentication and session issuance."
+"session-cache" = "Hot path cache for active user sessions."

@@ -1,21 +1,21 @@
 //! Aegis daemon entrypoint.
 //!
 //! Wires the data plane (`aegis-core`) and the MCP control plane
-//! (`aegis-mcp`) together with a *shared* `Control` and `Queue`, so that
-//! an external MCP client (Cursor, Claude Desktop) can inspect and
-//! mutate the live state of the running ingest pipeline.
+//! (`aegis-mcp`) together with a *shared* `Control`, `Queue`, and incident
+//! memory `Store`, so external MCP clients (Cursor, Claude Desktop) and the
+//! browser UI all see the same live gateway state.
 //!
 //! Modes:
 //!   * default              — pipeline + MCP HTTP server (recommended)
 //!   * `--no-mcp`           — pipeline only
 //!   * `--mcp-only`         — stdio MCP server only (for clients that
-//!                            spawn the daemon as a subprocess)
+//!     spawn the daemon as a subprocess)
 //!   * `--mcp-http-only`    — MCP HTTP server only (useful when an
-//!                            external process is feeding HEC)
+//!     external process is feeding HEC)
 //!   * `--check-hec`        — send one ping event and exit
 
 use aegis_core::hec::{HecClient, HecEvent};
-use aegis_core::{pipeline, AegisConfig, Control, Queue};
+use aegis_core::{pipeline, AegisConfig, Control, IncidentStore, Queue};
 use aegis_mcp::AegisMcp;
 use clap::Parser;
 use std::net::SocketAddr;
@@ -83,16 +83,26 @@ async fn main() -> anyhow::Result<()> {
         return AegisMcp::new(control).serve_stdio().await;
     }
 
-    // The queue is needed by both the HEC sink (inside the pipeline) and
-    // the MCP `reset` tool. Construct it here so both halves share the
-    // same handle.
+    // Shared handles: the pipeline owns the queue + memory store; we
+    // forward references to the MCP layer so external agents can read
+    // them too.
     let queue = build_queue_if_possible(&cfg);
+    let store = match IncidentStore::open(&cfg.memory.path) {
+        Ok(s) => Some(s),
+        Err(e) => {
+            warn!(error = %e, path = %cfg.memory.path, "failed to open incident memory; MCP will run without past-incident recall");
+            None
+        }
+    };
 
     if args.mcp_http_only {
         let addr = resolve_mcp_listen(&cfg, args.mcp_listen.as_deref())?;
         let mut mcp = AegisMcp::new(control.clone());
         if let Some(q) = queue {
             mcp = mcp.with_queue(q);
+        }
+        if let Some(s) = store {
+            mcp = mcp.with_store(s);
         }
         return mcp.serve_http(addr).await;
     }
@@ -108,6 +118,9 @@ async fn main() -> anyhow::Result<()> {
                     let mut mcp = AegisMcp::new(control.clone());
                     if let Some(q) = queue {
                         mcp = mcp.with_queue(q);
+                    }
+                    if let Some(s) = store {
+                        mcp = mcp.with_store(s);
                     }
                     Some(tokio::spawn(mcp.serve_http(addr)))
                 }
@@ -135,9 +148,7 @@ async fn main() -> anyhow::Result<()> {
 }
 
 fn build_queue_if_possible(cfg: &AegisConfig) -> Option<Queue> {
-    if cfg.hec.is_none() {
-        return None;
-    }
+    cfg.hec.as_ref()?;
     match Queue::open(&cfg.queue.path, cfg.queue.max_disk_bytes) {
         Ok(q) => Some(q),
         Err(e) => {

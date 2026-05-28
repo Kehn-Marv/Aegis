@@ -1,6 +1,11 @@
 //! TOML configuration for the Aegis daemon.
+//!
+//! Every section here has a sensible default — you can run the daemon
+//! against an empty file. The example file (`configs/aegis.example.toml`)
+//! documents what each knob does in human language.
 
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 use std::path::Path;
 
 use crate::hec::HecConfig;
@@ -30,6 +35,30 @@ pub struct AegisConfig {
 
     #[serde(default)]
     pub mcp: McpConfig,
+
+    #[serde(default)]
+    pub causal: CausalConfig,
+
+    #[serde(default)]
+    pub memory: MemoryConfig,
+
+    #[serde(default)]
+    pub decision: DecisionConfig,
+
+    #[serde(default)]
+    pub silence: SilenceConfig,
+
+    /// Optional pin: `source_name → service_name`. When set, lines arriving
+    /// from `source_name` are tagged with `service_name` regardless of the
+    /// service inference rules.
+    #[serde(default)]
+    pub source_to_service: HashMap<String, String>,
+
+    /// Optional `service → one-line business impact text` map. Surfaces in
+    /// the decision card so engineers see "this is why it matters" without
+    /// hunting for context.
+    #[serde(default)]
+    pub services: HashMap<String, String>,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -82,7 +111,7 @@ fn default_max_open() -> usize {
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct SummaryConfig {
-    /// When true, `Collapsed` events whose AI classification is `"routine"`
+    /// When true, `Collapsed` events whose AI classification is `routine`
     /// are suppressed and rolled into periodic `Summary` events instead.
     /// Has no effect without an AI sidecar to provide classifications.
     #[serde(default)]
@@ -193,9 +222,9 @@ fn default_self_flush() -> u64 {
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct McpConfig {
-    /// Address for the streamable-HTTP MCP server. Set to `None` (omit) to
-    /// disable the HTTP server entirely; the daemon will then only expose
-    /// MCP via stdio when launched with `--mcp-only`.
+    /// Address for the streamable-HTTP MCP server. Set to `None` (omit)
+    /// to disable the HTTP server entirely; the daemon will then only
+    /// expose MCP via stdio when launched with `--mcp-only`.
     #[serde(default = "default_mcp_listen")]
     pub http_listen: Option<String>,
 }
@@ -210,6 +239,118 @@ impl Default for McpConfig {
 
 fn default_mcp_listen() -> Option<String> {
     Some("127.0.0.1:7321".to_string())
+}
+
+/// Causal chain detection knobs. See `gateway/aegis-core/src/causal.rs`.
+#[derive(Clone, Debug, Deserialize, Serialize)]
+pub struct CausalConfig {
+    #[serde(default = "default_causal_window")]
+    pub window_secs: u64,
+    #[serde(default = "default_causal_min_services")]
+    pub min_services: usize,
+    #[serde(default = "default_causal_cooldown")]
+    pub cooldown_secs: u64,
+}
+
+impl Default for CausalConfig {
+    fn default() -> Self {
+        Self {
+            window_secs: default_causal_window(),
+            min_services: default_causal_min_services(),
+            cooldown_secs: default_causal_cooldown(),
+        }
+    }
+}
+
+fn default_causal_window() -> u64 {
+    60
+}
+fn default_causal_min_services() -> usize {
+    3
+}
+fn default_causal_cooldown() -> u64 {
+    300
+}
+
+/// Incident memory store knobs. The store path is `<queue_dir>/incidents.sqlite`
+/// by default — i.e. the same `data/` folder the queue lives in.
+#[derive(Clone, Debug, Deserialize, Serialize)]
+pub struct MemoryConfig {
+    #[serde(default = "default_memory_path")]
+    pub path: String,
+    #[serde(default = "default_memory_top_n")]
+    pub top_matches: usize,
+    #[serde(default = "default_memory_min_similarity")]
+    pub min_similarity: f32,
+}
+
+impl Default for MemoryConfig {
+    fn default() -> Self {
+        Self {
+            path: default_memory_path(),
+            top_matches: default_memory_top_n(),
+            min_similarity: default_memory_min_similarity(),
+        }
+    }
+}
+
+fn default_memory_path() -> String {
+    "data/aegis-incidents.sqlite".into()
+}
+fn default_memory_top_n() -> usize {
+    3
+}
+fn default_memory_min_similarity() -> f32 {
+    0.25
+}
+
+/// Decision card synthesiser knobs.
+#[derive(Clone, Debug, Deserialize, Serialize)]
+pub struct DecisionConfig {
+    #[serde(default = "default_idle_green_secs")]
+    pub idle_to_green_secs: u64,
+}
+
+impl Default for DecisionConfig {
+    fn default() -> Self {
+        Self {
+            idle_to_green_secs: default_idle_green_secs(),
+        }
+    }
+}
+
+fn default_idle_green_secs() -> u64 {
+    300
+}
+
+/// Silent-service detector knobs.
+#[derive(Clone, Debug, Deserialize, Serialize)]
+pub struct SilenceConfig {
+    #[serde(default = "default_silence_secs")]
+    pub silence_secs: u64,
+    #[serde(default = "default_silence_sweep")]
+    pub sweep_secs: u64,
+    /// Set to `false` to disable the detector entirely. Useful for batch
+    /// pipelines whose services come and go on schedule.
+    #[serde(default = "default_true")]
+    pub enabled: bool,
+}
+
+impl Default for SilenceConfig {
+    fn default() -> Self {
+        Self {
+            silence_secs: default_silence_secs(),
+            sweep_secs: default_silence_sweep(),
+            enabled: true,
+        }
+    }
+}
+
+fn default_silence_secs() -> u64 {
+    120
+}
+fn default_silence_sweep() -> u64 {
+    10
 }
 
 impl AegisConfig {

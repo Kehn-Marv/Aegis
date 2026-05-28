@@ -4,9 +4,10 @@ A Splunkbase-shaped Splunk app that exercises the **`splunklib.ai`**
 agent SDK released with `splunk-sdk-python` to put two AI capabilities
 directly inside Splunk, alongside Aegis edge-telemetry data.
 
-This is the "AI for Splunk Apps - Build agentic workflows inside Splunk
-apps using the Python SDK" capability called out in the
-[Splunk Agentic Ops Hackathon resources](https://splunk.devpost.com/resources).
+Pairs with the Aegis edge gateway and its four-pillar pipeline (noise
+gate, causal chains, incident memory, decision cards). The saved
+searches now know about the new sourcetypes Aegis emits
+(`aegis:decision`, `aegis:causal`, `aegis:incident`, `aegis:silent`).
 
 ## What it ships
 
@@ -136,6 +137,12 @@ The repository ships a vetted package and report:
 |---|---|
 | [`appinspect-report.json`](appinspect-report.json) | Latest local `splunk-appinspect inspect --mode test` output |
 | `dist/aegis_ai.tar.gz` (built on demand) | The Splunkbase-installable tarball |
+
+> The `savedsearches.conf` in this repo now includes searches for the
+> new Aegis v0.2 sourcetypes (`aegis:decision`, `aegis:causal`,
+> `aegis:incident`, `aegis:silent`). Rebuild the tarball before
+> re-running AppInspect locally — the structure didn't change, only
+> the saved-search definitions did.
 
 ### Rebuild the tarball and re-validate
 

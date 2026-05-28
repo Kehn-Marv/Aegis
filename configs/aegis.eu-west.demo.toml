@@ -1,5 +1,5 @@
 # Multi-edge demo: EU-West region gateway.
-# Pair with configs/aegis.us-east.demo.toml for the AegisOps multi-edge demo.
+# Pair with configs/aegis.us-east.demo.toml for the multi-edge demo.
 # No [hec] -> stderr sink (no Splunk required).
 
 [ingest]
@@ -17,3 +17,23 @@ http_listen = "127.0.0.1:7322"
 
 [sidecar]
 enabled = false
+
+[causal]
+window_secs   = 30
+min_services  = 3
+cooldown_secs = 30
+
+[memory]
+path = "data/eu-west-incidents.demo.sqlite"
+
+[decision]
+idle_to_green_secs = 30
+
+[silence]
+silence_secs = 60
+sweep_secs   = 5
+
+[services]
+"payment-api"  = "Handles all transaction processing."
+"checkout"     = "Customer-facing checkout flow."
+"orders"       = "Order fulfilment pipeline."

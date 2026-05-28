@@ -1,9 +1,9 @@
 //! Periodic self-metrics emitter.
 //!
 //! Snapshots `Control` on a timer and pushes a JSON event to HEC under the
-//! dedicated `aegis:selfmetric` sourcetype. This feeds the AI Agent
-//! Monitoring dashboard (Phase 4) and proves the agent isn't introducing
-//! latency or token blowup.
+//! dedicated `aegis:selfmetric` sourcetype. Drives the Splunk dashboard's
+//! live KPIs (dedup savings, queue depth, health state, incidents
+//! remembered) and proves the agent isn't introducing latency.
 
 use crate::config::SelfMetricsConfig;
 use crate::control::Control;

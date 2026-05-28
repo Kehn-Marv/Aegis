@@ -1,17 +1,20 @@
-# Aegis Python AI Sidecar
+# Aegis Python AI sidecar
 
-A FastAPI service the Rust gateway calls out to for higher-resolution log
-analysis than structural hashing can provide.
+Optional FastAPI service the Rust gateway calls for higher-resolution
+log analysis than structural hashing can provide. The gateway runs fine
+without it — classification falls back to a keyword heuristic and the
+sidecar's only job goes away — but turning it on unlocks the AI
+classifier verdict on every collapsed event.
 
 ## Endpoints
 
 | Method | Path             | Purpose                                                    |
-|--------|------------------|------------------------------------------------------------|
+|--------|------------------|-------------------------------------------------------------|
 | `GET`  | `/health`        | Liveness probe                                             |
 | `GET`  | `/info`          | Which embedding / hosted models are loaded                 |
-| `POST` | `/embed`         | MiniLM (or fallback) embeddings for a batch of log lines   |
-| `POST` | `/cluster`       | KMeans cluster a batch of embeddings, returns labels       |
-| `POST` | `/cluster_lines` | Embed + cluster in one call (convenience for the gateway)  |
+| `POST` | `/embed`         | MiniLM (or fallback hash) embeddings for a batch of lines  |
+| `POST` | `/cluster`       | KMeans cluster a batch of embeddings                       |
+| `POST` | `/cluster_lines` | Embed + cluster in one call                                |
 | `POST` | `/classify`      | Classify a log line as `anomaly` / `routine` / `unknown`   |
 
 ## Classification strategy
@@ -20,55 +23,53 @@ analysis than structural hashing can provide.
 
 1. **Splunk Hosted Model (`| ai`)** — preferred when `AEGIS_SPLUNK_URL`
    and `AEGIS_SPLUNK_TOKEN` are set. Runs classification inside Splunk's
-   search pipeline via the AI Toolkit `| ai` command. **Currently
-   hibernated** because the hackathon's Splunk Cloud trial does not
-   provision the SLIM API — see
-   [`../docs/splunk-blocker.md`](../docs/splunk-blocker.md). Code path
-   is preserved and tested; setting the env vars re-activates it when
-   SLIM access lands.
-2. **OpenAI-compatible endpoint (incl. local Ollama)** — when
-   `AEGIS_HOSTED_MODEL_URL` is set. **This is the recommended path
-   today**: point it at a local Ollama server running `gpt-oss:20b` and
-   you get genuine LLM classification at the edge with zero Splunk
-   dependencies.
+   search pipeline via the AI Toolkit `| ai` command. Hibernated when
+   no Cloud / SLIM access — code path tested and reactivates on env-var
+   change.
+2. **OpenAI-compatible endpoint (e.g. local Ollama)** — when
+   `AEGIS_HOSTED_MODEL_URL` is set. Point it at
+   `http://127.0.0.1:11434/v1/chat/completions` and you get genuine
+   LLM classification at the edge with zero Splunk dependencies.
 3. **Embedding-distance** — cosine similarity between the line's
    sentence-transformer embedding and centroids built from canonical
-   anomaly/routine seed phrases. Default day-to-day path when nothing
-   else is configured: local, private, fast.
-4. **Keyword heuristic** — last-resort signal so the API never returns
-   `unknown` purely because nothing answered.
+   anomaly/routine seed phrases. Default day-to-day path: local,
+   private, fast.
+4. **Keyword heuristic** — final fallback so the API never returns
+   `unknown` because nothing answered.
 
 The response includes the `strategy` that actually produced the label
-(`splunk_ai`, `openai_compat`, `embedding_distance`, or `keyword`) so
-Splunk dashboards can show which path each event took.
+so dashboards can show which path each event took.
 
 ## Run locally
 
 ```powershell
 cd sidecar
-uv venv
-uv pip install -e .
-uv run aegis-sidecar
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1
+pip install -e . --extra-index-url https://download.pytorch.org/whl/cpu
+python -m aegis_sidecar.server
+# expect:  Uvicorn running on http://127.0.0.1:8765
 ```
 
-Default address: `127.0.0.1:8765`. Override with `AEGIS_SIDECAR_HOST` /
-`AEGIS_SIDECAR_PORT`.
+> First `/classify` call lazy-downloads `sentence-transformers/all-MiniLM-L6-v2`
+> (~80 MB). Subsequent calls are sub-millisecond. Offline machines fall
+> back to a deterministic blake2b hash embedding so the API stays
+> functional.
 
-## Plan B: local Ollama (recommended today)
+## Plan B: local Ollama (recommended)
 
-Ollama exposes an OpenAI-compatible chat-completions endpoint that the
-existing adapter already supports. Install Ollama, pull the model, and
-point the sidecar at it:
+Ollama exposes an OpenAI-compatible chat endpoint the existing adapter
+already supports:
 
 ```powershell
-# 1. Install Ollama from https://ollama.com/download then:
-ollama pull gpt-oss:20b     # ~13 GB on disk, ~16 GB RAM (matches Splunk Hosted Models name)
-# Lower-spec alternatives: ollama pull qwen2.5:3b (~3 GB RAM) or ollama pull gemma2:2b (~2 GB RAM)
+ollama pull gpt-oss:20b           # ~13 GB on disk, ~16 GB RAM
+# or lower-spec alternatives:
+ollama pull qwen2.5:3b            # ~3 GB RAM
+ollama pull gemma2:2b             # ~2 GB RAM
 
-# 2. Point the sidecar at it (PowerShell):
 $env:AEGIS_HOSTED_MODEL_URL  = "http://127.0.0.1:11434/v1/chat/completions"
 $env:AEGIS_HOSTED_MODEL_NAME = "gpt-oss:20b"
-uv run aegis-sidecar
+python -m aegis_sidecar.server
 ```
 
 Verify:
@@ -79,23 +80,16 @@ curl.exe http://127.0.0.1:8765/info
 # hosted_model_name:      "gpt-oss:20b"
 ```
 
-The Aegis gateway will now annotate every collapsed event with a real
-LLM classification, generated entirely on your machine.
+## Splunk Hosted Models (when available)
 
-## Splunk Hosted Model adapter (hibernated)
+Same code path, different environment variables:
 
-When a Splunk Cloud account with SLIM API access becomes available,
-set these environment variables to route classification through
-Splunk Hosted Models via SPL `| ai`:
-
-| Variable                     | Default         | Purpose                                      |
-|------------------------------|-----------------|----------------------------------------------|
-| `AEGIS_SPLUNK_URL`           | _unset_         | Splunk base URL (no `/services/...` suffix)  |
-| `AEGIS_SPLUNK_TOKEN`         | _unset_         | Auth token (`search` + `apply_ai_commander_command`) |
-| `AEGIS_SPLUNK_AI_PROVIDER`   | `splunk_hosted` | AITK provider label from Connection Management |
-| `AEGIS_SPLUNK_AI_MODEL`      | `gpt-oss-20b`   | Model identifier                             |
-| `AEGIS_SPLUNK_VERIFY_TLS`    | `true`          | TLS verification                             |
-| `AEGIS_SPLUNK_TIMEOUT_SECS`  | `12`            | Per-request timeout                          |
+| Variable                  | Default         | Purpose                                      |
+|---------------------------|-----------------|----------------------------------------------|
+| `AEGIS_SPLUNK_URL`        | _unset_         | Splunk base URL                              |
+| `AEGIS_SPLUNK_TOKEN`      | _unset_         | Auth token (needs `search` + `apply_ai_commander_command`) |
+| `AEGIS_SPLUNK_AI_PROVIDER`| `splunk_hosted` | AITK provider name                           |
+| `AEGIS_SPLUNK_AI_MODEL`   | `gpt-oss-20b`   | Model identifier                             |
 
 Verify Splunk can run `| ai` before pointing the sidecar at it:
 
@@ -105,20 +99,14 @@ Verify Splunk can run `| ai` before pointing the sidecar at it:
 | ai prompt=prompt provider=splunk_hosted model=gpt-oss-20b
 ```
 
-## OpenAI-compatible fallback
-
-For offline development without Splunk credentials:
+## Environment-only knobs
 
 | Variable                          | Default            | Purpose                          |
 |-----------------------------------|--------------------|----------------------------------|
-| `AEGIS_HOSTED_MODEL_URL`          | _unset_            | Chat-completions endpoint        |
-| `AEGIS_HOSTED_MODEL_TOKEN`        | _unset_            | Bearer token                     |
-| `AEGIS_HOSTED_MODEL_NAME`         | `gpt-oss-20b`      | Model identifier                 |
-| `AEGIS_HOSTED_MODEL_TIMEOUT_SECS` | `6`              | Per-request timeout              |
+| `AEGIS_SIDECAR_PORT`              | `8765`             | Bind port                        |
+| `AEGIS_SIDECAR_HOST`              | `127.0.0.1`        | Bind host                        |
 | `AEGIS_EMBEDDING_MODEL`           | MiniLM-L6-v2       | Override the local embedder      |
-
-<!-- Tests are intentionally not committed to this repo (see .gitignore).
-     Devs adding tests locally can install dev deps with:
-       uv pip install -e ".[dev]"
-     and run them with `uv run pytest`. -->
-
+| `AEGIS_HOSTED_MODEL_URL`          | _unset_            | OpenAI-compatible chat endpoint  |
+| `AEGIS_HOSTED_MODEL_TOKEN`        | _unset_            | Bearer token (Ollama ignores)    |
+| `AEGIS_HOSTED_MODEL_NAME`         | `gpt-oss-20b`      | Model identifier                 |
+| `AEGIS_HOSTED_MODEL_TIMEOUT_SECS` | `6`                | Per-request timeout              |

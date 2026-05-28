@@ -1,164 +1,177 @@
-# Aegis Technical Architecture
+# Aegis — technical architecture (deep dive)
 
-The system is split into two environments — the **Local Edge Environment**
-where applications run and where Aegis lives, and the **Central Splunk
-Environment** where ingestion, indexing, and the AI Assistant reside.
+The high-level architecture diagram lives at the root in
+[`../ARCHITECTURE.md`](../ARCHITECTURE.md). This page expands on the data
+flows, the per-stage state machines, and the assumptions Aegis makes
+about its environment.
 
-```mermaid
-flowchart LR
-    subgraph Edge["Local Edge Environment"]
-        APP["Microservices<br/>raw logs &amp; metrics"]
-        subgraph Aegis["Aegis Gateway"]
-            ING["Ingest<br/>TCP / UDP / file-tail"]
-            CORE["Processing Core<br/>signature hash · dedup<br/>· summarize"]
-            QUEUE[("Priority Queue<br/>SQLite buffer")]
-            MCPSRV["MCP Server (aegis-mcp v0.1)<br/>reset / status / diagnostic<br/>override / replay_raw"]
-            SELFM["Self-metrics<br/>emitter"]
-        end
-        SIDECAR["Python AI Sidecar<br/>embeddings · clustering"]
-        OLLAMA["Local Ollama<br/>gpt-oss:20b"]
-        OPS["AegisOps Agent<br/>observe → reason → act<br/>(+ CDTSM-aware)"]
-    end
+## The single-daemon model
 
-    subgraph Splunk["Central Splunk Environment"]
-        HEC[/"HTTP Event Collector"/]
-        INDEX[("Indexed Events<br/>aegis:raw / metric /<br/>selfmetric / agent /<br/>aegis_ai:assessment")]
-        DASH["Dashboard Studio<br/>11 panels + CDTSM<br/>forecast lines"]
-        CDTSM["CDTSM Foundation Model<br/>(Splunk Hosted)<br/>| apply CDTSM"]
-        SMCP["Splunk MCP Server<br/>splunk_run_query<br/>via JSON-RPC tools/call"]
-        AITK["AI Toolkit<br/>Connection Mgmt<br/>| ai SPL"]
-        SAIA["AI Assistant 2.0"]
-        HOSTED["Splunk Hosted Models<br/>gpt-oss-20b · Foundation-Sec"]
-        subgraph SPLUNKAPP["Aegis AI Splunk App"]
-            ALERT["Custom Alert Action<br/>aegis_severity_assessment"]
-            CSC["Custom Search Cmd<br/>| aegisreason"]
-            SDKAGENT["splunklib.ai<br/>OpenAIModel + Agent"]
-        end
-    end
+`aegis-daemon` is one Rust process. Inside it run six Tokio tasks
+glued together by `mpsc` channels:
 
-    AGENT["External AI Agent<br/>Cursor / Claude Desktop"]
-
-    APP -->|raw stream| ING
-    ING --> CORE
-    CORE <-->|embed / classify| SIDECAR
-    CORE -->|enqueue| QUEUE
-    QUEUE -->|dedup metrics + summaries| HEC
-    CORE -->|first-occurrence raw + override raw| HEC
-    SELFM -->|agent perf telemetry| HEC
-    HEC --> INDEX
-    INDEX --> DASH
-    INDEX --> CDTSM
-    CDTSM -->|forecast| DASH
-    CDTSM -->|forecast| OPS
-
-    AGENT <-->|MCP tools/call| SMCP
-    AGENT <-->|MCP tools/call| MCPSRV
-    MCPSRV -.->|control commands| CORE
-
-    OPS -->|REST /api/*| MCPSRV
-    OPS -->|reason: ollama| OLLAMA
-    OPS -->|reason: aitk_ollama| AITK
-    OPS -.->|reason: splunk_ai<br/>when SLIM available| AITK
-    OPS -->|observe: MCP tools/call<br/>↳ REST oneshot fallback| SMCP
-    OPS -->|audit| HEC
-
-    AITK -->|provider=ollama_local| OLLAMA
-    AITK -.->|provider=splunk_hosted| HOSTED
-
-    INDEX -->|saved search trigger| ALERT
-    ALERT --> SDKAGENT
-    CSC --> SDKAGENT
-    SDKAGENT -->|OpenAI HTTP| OLLAMA
-    ALERT -->|index assessment| HEC
-
-    SMCP --> INDEX
-    SAIA <--> HOSTED
-    SIDECAR -.->|&#124; ai classify| AITK
-
-    classDef edge fill:#0b3d2e,stroke:#3ddc97,color:#fff
-    classDef splunk fill:#1a1a3e,stroke:#7c5cff,color:#fff
-    classDef splunkapp fill:#2a1a4e,stroke:#b58cff,color:#fff
-    classDef agent fill:#3d2a0b,stroke:#ffb86b,color:#fff
-    class APP,ING,CORE,QUEUE,MCPSRV,SELFM,SIDECAR,OLLAMA edge
-    class HEC,INDEX,DASH,SMCP,SAIA,HOSTED,AITK,CDTSM splunk
-    class ALERT,CSC,SDKAGENT splunkapp
-    class AGENT,OPS agent
+```text
+ingest        → mpsc<IngestLine>     ┐
+                                     ├─→ dedup     → mpsc<ProcessedEvent>
+                                     │                    ┌─→ causal
+                                     │                    │      ↓
+                                     │                    ├─→ silence
+                                     │                    │      ↓
+                                     │                    └─→ decision
+                                     │                            ↓
+                                     │                          queue
+                                     │                            ↓
+                                     │                          HEC sink
+                                     │
+self_metrics  → HEC every 15s ───────┘
+mcp_server    → axum service binding /mcp + /api (shares Arc<Control>+Arc<Queue>+Arc<IncidentStore>)
 ```
 
-## Data flow
+Every stage forwards every event downstream unchanged. The extra
+stages (causal, silence, decision) additionally emit new events
+(`CausalChain`, `ServiceSilent`, `IncidentMemory`, `DecisionCard`)
+when their conditions fire.
 
-1. **Raw telemetry** flows from microservices to Aegis's ingest layer over
-   TCP / UDP / file-tail. The ingest layer normalizes records to a common
-   internal shape and tags each with an arrival timestamp.
-2. The **Processing Core** computes a *structural signature* for every log
-   line — a hash of the line with numbers, UUIDs, timestamps, and other
-   high-cardinality tokens masked out. Identical signatures arriving within a
-   configurable window are collapsed into a single metric event of the form
-   `{signature, count, window, first_seen, last_seen, sample}`.
-3. The first occurrence of any signature is always sent raw (so an operator
-   has full context for the incident); subsequent occurrences within the
-   window become a single metric.
-4. **Routine traffic** (HTTP 2xx, INFO-level structured logs) is batched and
-   summarized into compact JSON: `{status: "routine", requests, p50_ms,
-   p95_ms, p99_ms, anomalies}`.
-5. The **Python AI Sidecar** is called out-of-band to embed log lines and
-   cluster them at higher semantic resolution than the structural hash —
-   catching templated messages that vary too much for hash-based dedup.
-6. The **SQLite-backed priority queue** buffers everything locally. On
-   reconnect after an outage, it drains *anomalies first*, then summaries,
-   then routine batches.
-7. **HEC** receives everything: deduplicated metrics, summaries, first-seen
-   raw lines, and override-mode raw streams.
-8. The **AI Agent Monitoring dashboard** consumes Aegis's own self-metrics
-   (latency, dedup ratio, queue depth, signature count, sidecar token use)
-   from a dedicated HEC source.
+## The pillars, in detail
 
-## Control flow (agentic)
+### 1. Noise gate (`signature` + `dedup` + `summary`)
 
-The Aegis daemon exposes an MCP server. Any MCP-aware agent (Cursor, Claude
-Desktop, or a custom orchestrator built on Splunk's MCP Server) can:
+* `signature::compute` masks high-cardinality tokens (numbers, UUIDs,
+  IPs, RFC3339 timestamps, hex blobs, durations) and `blake3`-hashes
+  the result. Two messages that differ only in those tokens hash the
+  same.
+* `dedup::run` keeps an open-signature `HashMap<Signature, OpenEntry>`.
+  First arrival emits `FirstOccurrence` immediately; subsequent
+  arrivals inside the window bump `count`. On window close (or eviction
+  when `max_open_signatures` is hit), `count > 1` produces a single
+  `Collapsed` event; `count == 1` drops silently because the first
+  occurrence already covered it.
+* `summary::SummaryTable` rolls routine-classified `Collapsed`
+  events into per-source `Summary` events when the sidecar is enabled.
 
-* call `status` to inspect the live queue and dedup state,
-* call `override` during an incident to disable compression and stream raw
-  logs for a configurable window,
-* call `replay_raw` to ask the gateway to re-emit buffered raw events for a
-  specific time range,
-* call `diagnostic` to enable deep tracing at the edge,
-* call `reset` to clear state during testing.
+### 2. Causal chain (`service` + `causal`)
 
-The intended demo orchestration: a single AI agent connects to *both*
-Splunk's MCP Server (to run SPL searches) and Aegis's MCP Server (to control
-the edge). The agent reasons across both: "search Splunk for unusual error
-counts → if found, call Aegis's `override` tool to get raw logs → search
-Splunk again for the now-streamed raw lines."
+* `service::extract_full` extracts a service name from each log line.
+  Priority: config hint → continuation-line inheritance → JSON field →
+  `svc=…` k/v → `LEVEL service:` prefix → bracket prefix → fallback to
+  the ingest source string.
+* `causal::run` keeps a per-service ring buffer of recent
+  `FirstOccurrence` events. On each new event, it computes the earliest
+  first-fire per service in the window. When ≥ `min_services` distinct
+  services are present, it emits one `CausalChain` event whose `chain`
+  is sorted by `ts` (earliest first = root cause).
+* A `cooldown_secs` keyed by `root_cause_service` prevents
+  re-emission so a long-running incident produces one chain, not one
+  per dedup window.
 
-## Why this wins the special prizes
+### 3. Incident memory (`incident_memory`)
 
-* **Best Use of Splunk MCP Server.** Aegis is on **both sides** of MCP.
-  It hosts its own MCP server (`aegis-mcp v0.1`, five edge-control
-  tools) *and* the AegisOps agent is a real MCP **client** of
-  `splunk_run_query`, auto-detecting the search tool name from
-  `tools/list`. Every observational SPL the agent runs becomes a
-  JSON-RPC `tools/call` traceable in
-  `index=_internal sourcetype=mcpjson "tools/call"`. The demo shows a
-  single Cursor session with *both* servers registered.
-* **Best Use of Splunk Hosted Models.** Three live integrations:
-  (1) **CDTSM** dashboard forecast panels + agent feedback loop
-  ([`cdtsm-forecast.md`](cdtsm-forecast.md)),
-  (2) **AITK `| ai` SPL command** routed through AITK Connection
-  Management to local Ollama running `gpt-oss:20b` (the same model
-  identifier Splunk Hosted Models publishes) — see
-  [`aitk-ollama.md`](aitk-ollama.md),
-  (3) one-line config switch to **true SLIM-backed `splunk_hosted`**
-  when provisioned. The sidecar's semantic classifier path also goes
-  through AITK.
-* **Best Use of Splunk Developer Tools.** `apps/aegis_ai/` is a
-  Splunkbase-shaped Splunk app using `splunklib.ai.OpenAIModel` +
-  `Agent` to ship a **Custom Alert Action** and a `| aegisreason`
-  **Custom Search Command**, validated by `splunk-appinspect`
-  (0 failures, 0 future_failures). See
-  [`../apps/aegis_ai/README.md`](../apps/aegis_ai/README.md).
-* **AI Agent Monitoring.** Aegis emits its own performance and
-  reasoning telemetry (including the LLM transport choice and CDTSM
-  breach signals) so the dashboard literally shows the AI agent's
-  behavior — and predicted future behavior — in real time.
+* `IncidentStore::open` creates (or opens) a SQLite file in WAL mode.
+  Schema: one table `incidents` with indexes on `ts` and `chain_id`.
+* `record_chain` persists a fresh fingerprint (cause/fix null,
+  resolved_at null).
+* `search_similar` reads the most recent ~2048 fingerprints into
+  memory and scores each one against the new chain using a weighted
+  Jaccard + LCS formula. Scoring runs in Rust at native speed — the
+  whole search is sub-millisecond at typical store sizes.
+* `resolve` attaches a `ResolutionCard` (cause + fix) and stamps
+  `resolved_at` + `resolved_in_minutes` (delta from chain `ts`).
+
+### 4. Decision card (`decision` + `service_catalog`)
+
+* `DecisionEngine::on_chain` is the synthesiser. Inputs: the new
+  `CausalChain`, the result of `Store::search_similar`, and the
+  `ServiceCatalog` lookup for the root service. Output: one
+  `DecisionCard` event.
+* Headline is rendered from the chain — "X broke first. Y followed Ns
+  later. Root cause: X (NN% confidence)."
+* Suggested next step prefers the highest-similarity *resolved* past
+  incident over any other match. Falls back to a first-time-nudge
+  copy ("please record a resolution card when you fix this") when no
+  matches exist.
+* Idle ticks downshift the card to green after
+  `idle_to_green_secs` of quiet.
+
+### Silent-service detector (`silence`)
+
+* Maintains a `HashMap<service, Heartbeat>` of `(last_seen_unix,
+  last_sample, flagged)`.
+* On every `FirstOccurrence`, `Collapsed`, and `Raw` event,
+  refreshes the heartbeat and clears `flagged`.
+* On each sweep (every `sweep_secs`), emits a `ServiceSilent` event
+  for any unflagged service whose silence exceeds `silence_secs`.
+  Sets `flagged = true` so we don't re-emit until the service talks
+  again.
+
+## State surfaced on the control plane
+
+`Control::snapshot()` returns the full `GatewayStatus`:
+
+| Field                  | Source                                     |
+|------------------------|---------------------------------------------|
+| `uptime_secs`          | wall-clock since process start              |
+| `online`               | `set_online` toggle                          |
+| `override_active`      | `enable_override(N)` until ts > now         |
+| `diagnostic_active`    | same shape                                   |
+| `queue_depth`          | `queue::depth()` on HEC sink iterations     |
+| `events_in / out`      | atomics bumped in dedup + sink stages       |
+| `dedup_savings_pct`    | derived ratio                                |
+| `unique_signatures`    | bumped on FirstOccurrence                    |
+| `state`                | green / orange / red, set by decision engine |
+| `incidents_remembered` | `Store::count()` after each card             |
+| `decision`             | full latest `DecisionCard` event             |
+
+The same snapshot powers (a) the React UI's `/api/status` poll every
+2 s, (b) the MCP `status` and `latest_decision` tools, (c) the
+`aegis:selfmetric` event every 15 s. There's no second source of truth.
+
+## Three planes, one process
+
+| Plane    | What it does                                                                  | Implementation              |
+|----------|--------------------------------------------------------------------------------|------------------------------|
+| Data     | ingest → dedup → causal → silence → decision → queue → HEC sink              | `aegis-core` (Rust + tokio)  |
+| AI       | classify each new signature once, attach to eventual metric                  | `sidecar/` (FastAPI, optional) |
+| Control  | shared `Arc` exposed via MCP, REST API, and the React UI                     | `aegis-mcp` (Rust + axum)    |
+
+The shared `Arc`s are the whole trick. The MCP `override` tool, the
+React UI's "raw passthrough" toggle, and a hypothetical external
+script calling `POST /api/command` all converge on the same atomic
+flag the dedup loop reads on its hot path.
+
+## Splunk integration touchpoints
+
+| Capability                  | How Aegis uses it                                                                                                            | Targeted prize                       |
+|-----------------------------|------------------------------------------------------------------------------------------------------------------------------|---------------------------------------|
+| **HEC**                     | Primary egress. Seven sourcetypes (`raw`, `metric`, `summary`, `causal`, `decision`, `incident`, `silent`) + `selfmetric`    | Best of Observability                  |
+| **MCP Server (Splunkbase)** | Aegis on both sides: own MCP server (8 tools) + AegisOps Agent as a real MCP client of `splunk_run_query` (auto-detected)   | Best Use of Splunk MCP Server          |
+| **AI Toolkit `\| ai`**      | Three live LLM transports (`ollama`, `aitk_ollama`, `splunk_ai`), one config flag switches between them                     | Best Use of Splunk Hosted Models       |
+| **Hosted Models**           | Default `gpt-oss:20b` matches Hosted Models identifier; one env var flips to true SLIM-backed `gpt-oss-20b`                | Best Use of Splunk Hosted Models       |
+| **CDTSM**                   | Two dashboard forecast panels; AegisOps reads the same forecast and surfaces it as a `PREDICTIVE SIGNAL` in the LLM prompt | Best Use of Splunk Hosted Models       |
+| **`splunklib.ai`**          | Splunkbase app with Custom Alert Action + `\| aegisreason` Custom Search Command — AppInspect clean                          | Best Use of Splunk Developer Tools     |
+| **Dashboard Studio**        | One dashboard with a panel per pillar + the FinOps headlines + CDTSM forecast lines                                          | Best of Observability                  |
+
+## Memory and performance envelope
+
+| Component             | Bound                                                       |
+|-----------------------|-------------------------------------------------------------|
+| Dedup open table      | `max_open_signatures` (default 4096) — bounded by config    |
+| Causal ring buffer    | `per_service_buffer` × known services (default 16 × N)      |
+| Silence heartbeats    | one entry per known service (~100 B each)                    |
+| Decision card slot    | one cached event in `Control` (single `Mutex`)              |
+| Incident memory       | full SQLite store; in-memory scan touches at most 2048 rows |
+| Self-metrics          | one event every 15 s                                         |
+
+In steady state with 50 services and ~10K events/min ingest, the
+daemon's RSS sits well under 100 MB on Windows / Linux / macOS.
+
+## File map
+
+See [`../ARCHITECTURE.md`](../ARCHITECTURE.md) for the canonical file
+map. The crate boundaries are:
+
+* `aegis-core` — pure library. No knowledge of MCP or daemon
+  bootstrap. Reused by both the daemon and the MCP crate.
+* `aegis-mcp` — `rmcp` + `axum` glue. Owns the public HTTP surface.
+* `aegis-daemon` — thin binary that constructs the shared
+  `Control` / `Queue` / `IncidentStore` and runs both pipeline and
+  MCP server.

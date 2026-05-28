@@ -39,3 +39,34 @@ class GatewayClient:
         r = await self._client.post(f"{self.base}/api/command", json=body)
         r.raise_for_status()
         return r.json()
+
+    async def latest_decision(self) -> dict | None:
+        """Return the current decision card, or `None` when the gateway is
+        green (no active incident).
+
+        Older Aegis gateways without `/api/decision` return 404 silently;
+        the observer treats that as "no card".
+        """
+        r = await self._client.get(f"{self.base}/api/decision")
+        if r.status_code == 404:
+            return None
+        r.raise_for_status()
+        try:
+            data = r.json()
+        except Exception:
+            return None
+        if isinstance(data, dict) and data.get("kind") == "decision_card":
+            return data
+        return None
+
+    async def recent_incidents(self, limit: int = 20) -> list[dict]:
+        """List recent fingerprints from the gateway's incident memory."""
+        r = await self._client.get(f"{self.base}/api/incidents", params={"limit": limit})
+        if r.status_code == 404:
+            return []
+        r.raise_for_status()
+        try:
+            data = r.json()
+        except Exception:
+            return []
+        return list(data.get("incidents", []) or [])

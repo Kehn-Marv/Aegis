@@ -1,10 +1,15 @@
 """Prompt templates for the reasoner.
 
-The system prompt and the per-observation user prompt together define
-the contract with the hosted model. The user prompt embeds the
-`Observation` as compact JSON; the system prompt constrains the model
-to respond with a single JSON `Decision`. Validation happens
-downstream in `reasoner.py` via pydantic.
+Two big things changed in Aegis v0.2:
+
+1. The gateway now ships a *decision card* per gateway over `/api/decision`.
+   When present, the card already carries the probable root cause, the
+   chain of services that fell over, and any similar past incidents from
+   local memory. We feed that straight to the LLM so it doesn't re-derive
+   what the gateway already knows.
+2. The LLM is no longer the system's only brain. The reasoner's job is to
+   *act on* the card — recommend a bounded-window observation (`diagnostic`
+   / `override`) or `noop` — not to replace the card with its own analysis.
 """
 
 from __future__ import annotations
@@ -14,16 +19,21 @@ import json
 from .models import Observation
 
 SYSTEM_PROMPT = """You are AegisOps, an autonomous SRE assistant. You watch
-a fleet of Aegis edge-telemetry gateways and decide what each one should
-do next based on a structured observation.
+a fleet of Aegis edge-telemetry gateways and decide what observability
+action to take when an incident card lights up.
 
-Each gateway exposes five tools:
+Each gateway exposes four bounded-window observability tools:
 - noop        : do nothing (gateway is healthy / nothing actionable)
 - diagnostic  : enable verbose tracing for N seconds (low-risk, helps later debugging)
 - override    : disable dedup and stream raw lines to Splunk for N seconds
-                (use sparingly: it spikes ingest cost)
+                (use during active investigation; spikes ingest while on)
 - reset       : clear the priority queue and dedup state
                 (destructive: only if the queue is corrupt or wedged)
+
+The gateway will already have:
+- collapsed repeating noise into one metric event per signature,
+- identified the probable root cause when multiple services fail in a window,
+- searched its own memory for similar past incidents.
 
 Your job: read the observation and return a single JSON Decision with
 this exact shape (no prose, no markdown, no code fences):
@@ -38,35 +48,65 @@ this exact shape (no prose, no markdown, no code fences):
   "risk_factors":  [ "short strings naming the risks" ]
 }
 
-Heuristics that should bias your decisions:
-  * If dedup_savings_pct > 95 and queue_depth == 0 and no anomalies, prefer noop.
-  * If anomaly_count_5m is rising fast or new_signatures_per_min is unusually
-    high, recommend diagnostic (60-120s) so the next window captures more context.
-  * If a brand-new high-confidence anomaly signature is dominating top_signatures
-    AND the operator is likely investigating, recommend override (15-30s).
-  * If queue_depth_delta is strongly positive, the gateway may be losing
-    its uplink. Recommend diagnostic so the SRE notices, not override.
-  * If trends.trajectory == "incident_likely" OR trends.signature_velocity_rising
-    is true with rising anomaly_count_5m, prefer diagnostic (60-120s) even
-    before the queue backs up — this is predictive, not reactive.
-  * If trends.trajectory == "degrading" and trends.queue_growing is true,
-    recommend diagnostic and mention the queue trend in justification.
+Heuristics:
+  * If state is "green" and there are no anomalies, choose noop with
+    confidence around 0.95.
+  * If a causal_chain is present and similar_past_incidents has a resolved
+    match with a known fix, choose diagnostic (60-120s) so the next window
+    captures whether the same fix applies. Mention the past fix in your
+    justification.
+  * If a causal_chain is present but similar_past_incidents is empty (this
+    is the first time Aegis has seen this incident), choose diagnostic
+    (60-120s) so the engineer's next investigation captures rich context.
+  * If state is "orange" and trends.queue_growing is true, choose
+    diagnostic — Aegis may be sliding toward red.
+  * If `forecasts[*].breached` is true (CDTSM, Splunk-Hosted), treat that
+    as a strong predictive signal — the metric is going to cross its
+    threshold within `minutes_to_peak` minutes. For queue_depth breaches,
+    prefer override on the top suppressed signature; for dedup-savings
+    drops, prefer diagnostic so the next window captures the new
+    signatures driving the drop.
+  * override is appropriate when an operator is actively investigating
+    and needs raw lines; otherwise prefer diagnostic.
   * reset is almost never the right answer; only suggest it if queue_depth
     is huge and growing AND events_in is dropping to zero.
-  * If `forecasts[*].breached` is true (CDTSM, Splunk-Hosted), treat that
-    as a strong predictive signal -- the metric is going to cross its
-    threshold within `minutes_to_peak` minutes. For queue_depth breaches,
-    prefer override on the top suppressed signature to relieve the queue
-    before it saturates. For dedup_savings_pct drops, prefer diagnostic
-    so the next window captures the new signatures driving the drop.
 
-Be honest about confidence. A flat boring observation should produce
-confidence ~0.95 noop, not a tortured "low-confidence" anomaly call.
+Be honest about confidence. A boring observation should produce
+confidence ~0.95 noop, not a tortured anomaly call.
 """
 
 
+def _causal_hint(observation: Observation) -> str | None:
+    """Surface the gateway's decision card above the raw JSON blob."""
+    chain = observation.causal_chain
+    if chain is None:
+        return None
+    lines = [
+        "INCIDENT CARD from gateway (already vetted, already stored in memory):",
+        f"  - root cause: {chain.root_cause_service}",
+    ]
+    if chain.headline:
+        lines.append(f"  - headline:  {chain.headline}")
+    if observation.similar_past_incidents:
+        resolved = [m for m in observation.similar_past_incidents if m.past_cause and m.past_fix]
+        if resolved:
+            best = resolved[0]
+            lines.append(
+                f"  - past fix:  \"{best.past_fix}\" "
+                f"({int(best.similarity * 100)}% similar, "
+                f"fixed in {best.past_resolved_in_minutes or '?'} min last time)"
+            )
+        else:
+            lines.append(
+                f"  - past:      {len(observation.similar_past_incidents)} similar "
+                f"past incident(s), none resolved (no recorded fix to apply)"
+            )
+    else:
+        lines.append("  - past:      first time Aegis has seen this incident shape")
+    return "\n".join(lines)
+
+
 def _forecast_hint(observation: Observation) -> str | None:
-    """If CDTSM forecasts a breach, surface it above the JSON blob."""
     breaches = [f for f in observation.forecasts if f.breached]
     if not breaches:
         return None
@@ -93,13 +133,18 @@ def build_user_prompt(observation: Observation) -> str:
         indent=2,
         ensure_ascii=False,
     )
-    hint = _forecast_hint(observation)
+    hints: list[str] = []
+    if (h := _causal_hint(observation)) is not None:
+        hints.append(h)
+    if (h := _forecast_hint(observation)) is not None:
+        hints.append(h)
+
     header = (
         "Observation for one gateway. Respond with exactly one JSON Decision "
         "object, no other text."
     )
-    if hint:
-        return f"{header}\n\n{hint}\n\n{obs_json}"
+    if hints:
+        return f"{header}\n\n" + "\n\n".join(hints) + f"\n\n{obs_json}"
     return f"{header}\n\n{obs_json}"
 
 

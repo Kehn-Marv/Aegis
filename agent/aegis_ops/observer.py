@@ -19,8 +19,10 @@ from dataclasses import dataclass, field
 
 from .gateway_client import GatewayClient
 from .models import (
+    CausalChainSummary,
     CdtsmForecast,
     GatewayStatus,
+    IncidentMatchSummary,
     Observation,
     TopSignature,
     TrajectoryLabel,
@@ -117,6 +119,11 @@ class Observer:
 
         trends = self._compute_trends(hist, now, status, anomaly_count)
 
+        # Read the gateway's own decision card + memory matches directly
+        # from /api/decision. This is *cheaper* than running SPL because
+        # the gateway already did the heavy lifting in-process.
+        causal_chain, similar = await self._read_gateway_decision(gateway, notes)
+
         return Observation(
             gateway=gateway_name,
             gateway_url=gateway.base,
@@ -128,7 +135,63 @@ class Observer:
             trends=trends,
             forecasts=forecasts,
             notes=notes,
+            causal_chain=causal_chain,
+            similar_past_incidents=similar,
         )
+
+    async def _read_gateway_decision(
+        self, gateway: GatewayClient, notes: list[str]
+    ) -> tuple[CausalChainSummary | None, list[IncidentMatchSummary]]:
+        try:
+            payload = await gateway.latest_decision()
+        except Exception as exc:
+            notes.append(f"decision_card_unavailable: {exc}")
+            return None, []
+        if not payload:
+            return None, []
+        if payload.get("kind") != "decision_card":
+            return None, []
+        if payload.get("state") == "green":
+            return None, []
+
+        chain_id = payload.get("chain_id")
+        root = payload.get("root_cause_service")
+        if not chain_id or not root:
+            return None, []
+
+        # Aegis doesn't ship the full chain in the card itself (it's in
+        # /api/incidents instead), but we *can* reconstruct service order
+        # from the similar-incidents preview when present.
+        services = []
+        if isinstance(payload.get("similar_incidents"), list) and payload["similar_incidents"]:
+            # Use the most-similar incident's chain order as a hint, if any.
+            services = [root]
+
+        causal = CausalChainSummary(
+            chain_id=chain_id,
+            root_cause_service=root,
+            confidence=1.0,  # the gateway already vetted the chain
+            services=services,
+            headline=payload.get("headline"),
+        )
+
+        similar: list[IncidentMatchSummary] = []
+        for raw in payload.get("similar_incidents", []) or []:
+            try:
+                similar.append(
+                    IncidentMatchSummary(
+                        incident_id=str(raw.get("incident_id", "")),
+                        similarity=float(raw.get("similarity", 0.0)),
+                        past_root_cause_service=str(raw.get("past_root_cause_service", "")),
+                        past_cause=raw.get("past_cause"),
+                        past_fix=raw.get("past_fix"),
+                        past_resolved_in_minutes=raw.get("past_resolved_in_minutes"),
+                    )
+                )
+            except Exception:
+                # Defensive: a malformed entry shouldn't take down the tick.
+                continue
+        return causal, similar
 
     async def _top_signatures(self, gateway_name: str) -> list[TopSignature]:
         assert self.splunk is not None

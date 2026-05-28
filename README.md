@@ -51,58 +51,6 @@ external services required.
 
 ---
 
-## A 30-second demo (no Splunk required)
-
-You need Rust 1.80+ and Python 3.11+. Then, in three terminals:
-
-```powershell
-# 1. Build and start the gateway in demo mode (no Splunk needed).
-cargo build --bin aegis-daemon
-.\target\debug\aegis-daemon.exe --config configs\aegis.demo.toml
-```
-
-```powershell
-# 2. In a second terminal, send a multi-service incident.
-python demo\log_spammer.py --target tcp://127.0.0.1:5140 --pattern cascade
-```
-
-```powershell
-# 3. In a third terminal, watch the decision card appear.
-curl.exe --silent http://127.0.0.1:7321/api/decision
-```
-
-You'll see something like:
-
-```json
-{
-  "state": "red",
-  "root_cause_service": "payment-api",
-  "headline": "payment-api broke first. checkout followed 4s later. orders followed 8s later. Root cause: payment-api (100% confidence).",
-  "business_impact": "Handles all transaction processing.",
-  "suggested_next_step": "Check payment-api health and recent deploys...",
-  "similar_incidents": []
-}
-```
-
-Resolve it with two short sentences:
-
-```powershell
-'{"cause":"DB pool exhausted under retry storm.","fix":"Increased pool to 32, retry interval to 30s."}' | Out-File -Encoding ascii data\resolve.json
-$id = (curl.exe -s http://127.0.0.1:7321/api/incidents | ConvertFrom-Json).incidents[0].id
-curl.exe -X POST -H "Content-Type: application/json" --data-binary "@data\resolve.json" "http://127.0.0.1:7321/api/incidents/$id/resolve"
-```
-
-Re-run the cascade. The new decision card now carries the past fix:
-
-```json
-"suggested_next_step": "This looks 100% similar to a past incident (fixed in 2 min last time). Last time the cause was: \"DB pool exhausted under retry storm.\" The fix was: \"Increased pool to 32, retry interval to 30s.\" Start by verifying that."
-```
-
-That's Aegis. The institutional memory of every previous on-call, at the
-fingertips of the new one.
-
----
-
 ## What's in this repo
 
 ```text
@@ -142,7 +90,7 @@ Tools (Cargo will prompt you on first build).
 
 | Path | What you get                                                               | Time          |
 |------|----------------------------------------------------------------------------|---------------|
-| **A** | The 30-second demo above. No Splunk. The four pillars work end-to-end.    | ~5 minutes    |
+| **A** | Run the gateway, fire a cascade, watch Aegis recall its own past fixes.   | ~5 minutes    |
 | **B** | Path A plus Splunk Enterprise: HEC ingest, AI sidecar, full dashboard.    | ~45 minutes\* |
 | **C** | Path B plus two regional gateways and the autonomous AegisOps agent.      | +15 minutes   |
 
@@ -152,6 +100,8 @@ Tools (Cargo will prompt you on first build).
 
 ## Path A — Demo (no Splunk required)
 
+### A1. Build and start the gateway
+
 ```powershell
 git clone https://github.com/<your-handle>/aegis
 cd aegis
@@ -160,23 +110,62 @@ cargo build --bin aegis-daemon
 .\target\debug\aegis-daemon.exe --config configs\aegis.demo.toml
 ```
 
-In a second terminal, send traffic and watch the decision card:
+### A2. Send a multi-service incident
+
+In a second terminal:
 
 ```powershell
 # A multi-service cascade (~10s): payment-api → checkout → orders
 python demo\log_spammer.py --target tcp://127.0.0.1:5140 --pattern cascade
-
-# Read the current decision card
-curl.exe --silent http://127.0.0.1:7321/api/decision
-
-# List remembered incidents
-curl.exe --silent http://127.0.0.1:7321/api/incidents
 ```
 
 Other patterns to try: `crashloop` (dedup demo), `routine` (idle traffic),
 `silence` (silent-service detector demo).
 
-**See the live control panel:**
+### A3. Watch the decision card appear
+
+In a third terminal:
+
+```powershell
+curl.exe --silent http://127.0.0.1:7321/api/decision
+```
+
+You'll see something like:
+
+```json
+{
+  "state": "red",
+  "root_cause_service": "payment-api",
+  "headline": "payment-api broke first. checkout followed 4s later. orders followed 8s later. Root cause: payment-api (100% confidence).",
+  "business_impact": "Handles all transaction processing.",
+  "suggested_next_step": "Check payment-api health and recent deploys...",
+  "similar_incidents": []
+}
+```
+
+`curl.exe --silent http://127.0.0.1:7321/api/incidents` lists every
+fingerprint Aegis is currently remembering.
+
+### A4. Close the memory loop
+
+Resolve the incident with two short sentences:
+
+```powershell
+'{"cause":"DB pool exhausted under retry storm.","fix":"Increased pool to 32, retry interval to 30s."}' | Out-File -Encoding ascii data\resolve.json
+$id = (curl.exe -s http://127.0.0.1:7321/api/incidents | ConvertFrom-Json).incidents[0].id
+curl.exe -X POST -H "Content-Type: application/json" --data-binary "@data\resolve.json" "http://127.0.0.1:7321/api/incidents/$id/resolve"
+```
+
+Re-run the cascade. The new decision card now carries the past fix:
+
+```json
+"suggested_next_step": "This looks 100% similar to a past incident (fixed in 2 min last time). Last time the cause was: \"DB pool exhausted under retry storm.\" The fix was: \"Increased pool to 32, retry interval to 30s.\" Start by verifying that."
+```
+
+That's Aegis. The institutional memory of every previous on-call, at the
+fingertips of the new one.
+
+### A5. (Optional) See the live control panel
 
 ```powershell
 cd ui

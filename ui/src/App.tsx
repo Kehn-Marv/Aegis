@@ -177,7 +177,7 @@ export default function App() {
   );
 
   return (
-    <div className="mx-auto max-w-5xl">
+    <div className="mx-auto max-w-5xl px-4 pb-16 sm:px-6">
       <StatusBanner status={status} reachable={reachable} />
       <DecisionCardPanel
         status={status}
@@ -211,7 +211,7 @@ export default function App() {
         diagnosticActive={status?.diagnostic_active ?? false}
       />
       <ActivityLog entries={log} />
-      <footer className="px-6 pb-8 text-center text-xs text-slate-600">
+      <footer className="px-6 pb-2 pt-4 text-center text-xs text-neutral-400">
         Aegis · <span className="font-mono">v0.2.0</span> · REST{" "}
         <span className="font-mono">/api/status</span> · MCP{" "}
         <span className="font-mono">/mcp</span>

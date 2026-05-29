@@ -27,6 +27,7 @@
 //! | `diagnostic` / `override` / `replay_raw` — unchanged from v0.1.        |
 
 use std::net::SocketAddr;
+use std::path::PathBuf;
 use std::sync::Arc;
 
 use aegis_core::{
@@ -46,6 +47,7 @@ use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use tokio::net::TcpListener;
 use tower_http::cors::CorsLayer;
+use tower_http::services::{ServeDir, ServeFile};
 use tracing::info;
 
 /// MCP server handle. Cheap to clone — `Control`, `Queue`, and `IncidentStore`
@@ -109,10 +111,22 @@ impl AegisMcp {
             .route("/health", get(api_health))
             .with_state(api_state);
 
-        let app = Router::new()
+        let mut app = Router::new()
             .nest("/api", api_router)
-            .nest_service("/mcp", mcp_service)
-            .layer(CorsLayer::permissive());
+            .nest_service("/mcp", mcp_service);
+
+        // If a built control-panel UI is present, serve it from `/` with an
+        // SPA fallback to index.html. This means the daemon ships its own UI
+        // (no separate static server needed) both locally and in the
+        // container. Set AEGIS_UI_DIR to override the location.
+        if let Some(dir) = resolve_ui_dir() {
+            let index = dir.join("index.html");
+            info!(ui = %dir.display(), "serving control panel UI at {addr}/");
+            let static_svc = ServeDir::new(&dir).fallback(ServeFile::new(index));
+            app = app.fallback_service(static_svc);
+        }
+
+        let app = app.layer(CorsLayer::permissive());
 
         let listener = TcpListener::bind(addr)
             .await
@@ -127,6 +141,24 @@ impl AegisMcp {
             .context("aegis http serve")?;
         Ok(())
     }
+}
+
+/// Locate a built UI directory, if one exists. Checks `AEGIS_UI_DIR` first,
+/// then a couple of conventional locations (local dev build, container path).
+fn resolve_ui_dir() -> Option<PathBuf> {
+    if let Ok(dir) = std::env::var("AEGIS_UI_DIR") {
+        let p = PathBuf::from(dir);
+        if p.join("index.html").is_file() {
+            return Some(p);
+        }
+    }
+    for cand in ["ui/dist", "/app/ui"] {
+        let p = PathBuf::from(cand);
+        if p.join("index.html").is_file() {
+            return Some(p);
+        }
+    }
+    None
 }
 
 // ---------------------------------------------------------------------------

@@ -40,7 +40,7 @@ rmcp = { version = "1.7", features = [
 ] }
 schemars = "0.8"
 axum = "0.8"
-tower-http = { version = "0.6", features = ["cors", "trace"] }
+tower-http = { version = "0.6", features = ["cors", "trace", "fs"] }
 
 # Workspace-local crates
 aegis-core = { path = "gateway/aegis-core" }

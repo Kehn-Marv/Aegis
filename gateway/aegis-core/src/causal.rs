@@ -242,10 +242,16 @@ pub async fn run(
                 if let ProcessedEvent::FirstOccurrence {
                     service, signature, ts, line, ..
                 } = &ev {
-                    engine.record(service, signature, *ts, line);
-                    if let Some(chain) = engine.try_detect(*ts, Instant::now()) {
-                        if out_tx.send(chain).await.is_err() {
-                            break;
+                    // A causal chain is about things *breaking*. Routine INFO/
+                    // DEBUG first-sightings (a healthy service simply being seen
+                    // for the first time) must not seed a chain, or any busy
+                    // multi-service fleet would look like a perpetual incident.
+                    if is_anomalous(line) {
+                        engine.record(service, signature, *ts, line);
+                        if let Some(chain) = engine.try_detect(*ts, Instant::now()) {
+                            if out_tx.send(chain).await.is_err() {
+                                break;
+                            }
                         }
                     }
                 }
@@ -269,6 +275,17 @@ fn now_unix_secs() -> f64 {
         .duration_since(std::time::UNIX_EPOCH)
         .map(|d| d.as_secs_f64())
         .unwrap_or(0.0)
+}
+
+/// True for lines that signal something abnormal (errors, warnings, stack
+/// continuations, structured non-info lines). Routine `INFO`/`DEBUG`/`TRACE`
+/// first-occurrences return false so they never seed a causal chain.
+fn is_anomalous(line: &str) -> bool {
+    let first = line.trim_start().split_whitespace().next().unwrap_or("");
+    !matches!(
+        first.to_ascii_uppercase().as_str(),
+        "INFO" | "DEBUG" | "TRACE" | "NOTICE"
+    )
 }
 
 #[cfg(test)]
@@ -354,6 +371,38 @@ mod tests {
         in_tx.send(first("svc", "sig-a", 0.0)).await.unwrap();
         in_tx.send(first("svc", "sig-b", 1.0)).await.unwrap();
         in_tx.send(first("svc", "sig-c", 2.0)).await.unwrap();
+
+        let mut events = Vec::new();
+        while let Ok(Some(ev)) =
+            tokio::time::timeout(Duration::from_millis(150), out_rx.recv()).await
+        {
+            events.push(ev);
+        }
+        drop(in_tx);
+        task.await.unwrap().unwrap();
+
+        assert_eq!(events.len(), 3);
+        assert!(events.iter().all(|e| matches!(e, ProcessedEvent::FirstOccurrence { .. })));
+    }
+
+    #[tokio::test]
+    async fn routine_info_lines_do_not_fire_chain() {
+        let (in_tx, in_rx) = mpsc::channel::<ProcessedEvent>(16);
+        let (out_tx, mut out_rx) = mpsc::channel::<ProcessedEvent>(16);
+        let task = tokio::spawn(async move { run(CausalParams::default(), in_rx, out_tx).await });
+
+        // Three *healthy* services seen for the first time — INFO lines must
+        // never be mistaken for a multi-service incident.
+        let info = |svc: &str, sig: &str, ts: f64| ProcessedEvent::FirstOccurrence {
+            signature: sig.into(),
+            line: format!("INFO  [t] {svc}: 200 OK"),
+            ts,
+            source: "tcp://x".into(),
+            service: svc.into(),
+        };
+        in_tx.send(info("api-gateway", "s1", 0.0)).await.unwrap();
+        in_tx.send(info("auth", "s2", 1.0)).await.unwrap();
+        in_tx.send(info("orders", "s3", 2.0)).await.unwrap();
 
         let mut events = Vec::new();
         while let Ok(Some(ev)) =

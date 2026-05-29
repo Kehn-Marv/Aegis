@@ -26,28 +26,28 @@ export function IncidentMemoryPanel({ incidents, onResolve, busy }: Props) {
 
   return (
     <section className="px-6 pb-6">
-      <div className="rounded-lg border border-slate-800/80 bg-slate-900/40 p-5">
+      <div className="rounded-2xl bg-white p-5 shadow-card ring-1 ring-neutral-200/60">
         <div className="flex items-center justify-between">
           <div>
-            <div className="text-[11px] uppercase tracking-widest text-slate-400">
+            <div className="text-[11px] font-medium uppercase tracking-wider text-neutral-400">
               Incident memory
             </div>
-            <div className="mt-1 text-sm text-slate-300">
+            <div className="mt-1 text-sm text-neutral-600">
               Every chain Aegis has seen. Resolve one — even with two short
               sentences — and the next on-call gets a head start.
             </div>
           </div>
-          <div className="text-[11px] font-mono text-slate-500">
+          <div className="font-mono text-[11px] text-neutral-400">
             {incidents.length} fingerprint{incidents.length === 1 ? "" : "s"}
           </div>
         </div>
 
-        <div className="mt-4 space-y-2">
+        <div className="mt-4 space-y-2.5">
           {incidents.length === 0 && (
-            <div className="rounded border border-slate-800 bg-slate-950/40 p-4 text-sm text-slate-500">
-              No incidents fingerprinted yet. Run a cascade pattern in the
-              spammer to plant one:
-              <pre className="mt-2 overflow-x-auto rounded bg-slate-950/70 p-2 font-mono text-[11px] text-slate-300">
+            <div className="rounded-xl border border-neutral-200 bg-neutral-50/80 p-4 text-sm text-neutral-500">
+              No incidents fingerprinted yet. The workload app injects them on
+              its own — or plant one by hand:
+              <pre className="mt-2 overflow-x-auto rounded-lg bg-neutral-100 p-2.5 font-mono text-[11px] text-neutral-700">
 {`python demo/log_spammer.py --target tcp://127.0.0.1:5140 --pattern cascade`}
               </pre>
             </div>
@@ -59,32 +59,32 @@ export function IncidentMemoryPanel({ incidents, onResolve, busy }: Props) {
             return (
               <div
                 key={inc.id}
-                className={`rounded border ${
+                className={`rounded-xl border p-3.5 ${
                   resolved
-                    ? "border-emerald-700/40 bg-emerald-500/5"
-                    : "border-amber-700/40 bg-amber-500/5"
-                } p-3`}
+                    ? "border-emerald-200 bg-emerald-50/60"
+                    : "border-amber-200 bg-amber-50/60"
+                }`}
               >
                 <div className="flex items-center justify-between gap-3">
                   <div className="min-w-0">
                     <div className="flex flex-wrap items-center gap-2 text-xs">
-                      <span className="font-mono text-slate-200">{inc.id}</span>
-                      <span className="text-slate-500">·</span>
-                      <span className="text-slate-300">
+                      <span className="font-mono text-neutral-700">{inc.id}</span>
+                      <span className="text-neutral-300">·</span>
+                      <span className="text-neutral-500">
                         root cause:{" "}
-                        <span className="text-slate-100 font-semibold">
+                        <span className="font-semibold text-neutral-800">
                           {inc.root_cause_service}
                         </span>
                       </span>
-                      <span className="text-slate-500">·</span>
-                      <span className="text-slate-500">{formatTime(inc.ts)}</span>
+                      <span className="text-neutral-300">·</span>
+                      <span className="text-neutral-400">{formatTime(inc.ts)}</span>
                       {resolved && (
-                        <span className="ml-1 rounded bg-emerald-500/20 px-2 py-0.5 text-[10px] font-bold uppercase tracking-widest text-emerald-300">
+                        <span className="ml-1 rounded-md bg-emerald-100 px-2 py-0.5 text-[10px] font-bold uppercase tracking-widest text-emerald-700">
                           resolved
                         </span>
                       )}
                     </div>
-                    <div className="mt-1 text-xs text-slate-400 truncate">
+                    <div className="mt-1 truncate text-xs text-neutral-500">
                       chain: {inc.services.join(" → ")}
                     </div>
                   </div>
@@ -95,7 +95,7 @@ export function IncidentMemoryPanel({ incidents, onResolve, busy }: Props) {
                       setCause(inc.cause ?? "");
                       setFix(inc.fix ?? "");
                     }}
-                    className="shrink-0 rounded border border-slate-700 px-3 py-1 text-xs text-slate-200 hover:border-slate-500 hover:bg-slate-800"
+                    className="shrink-0 rounded-lg bg-white px-3 py-1 text-xs text-neutral-700 ring-1 ring-neutral-300 transition hover:bg-neutral-50"
                   >
                     {open ? "Hide" : resolved ? "View" : "Resolve"}
                   </button>
@@ -105,15 +105,15 @@ export function IncidentMemoryPanel({ incidents, onResolve, busy }: Props) {
                   <div className="mt-3 space-y-2">
                     {resolved && (
                       <>
-                        <div className="text-xs text-slate-300">
-                          <span className="text-slate-500">cause: </span>
+                        <div className="text-xs text-neutral-700">
+                          <span className="text-neutral-400">cause: </span>
                           {inc.cause}
                         </div>
-                        <div className="text-xs text-slate-300">
-                          <span className="text-slate-500">fix: </span>
+                        <div className="text-xs text-neutral-700">
+                          <span className="text-neutral-400">fix: </span>
                           {inc.fix}
                         </div>
-                        <div className="text-xs text-slate-500">
+                        <div className="text-xs text-neutral-400">
                           fixed in {inc.resolved_in_minutes ?? "?"} min
                         </div>
                       </>
@@ -121,30 +121,30 @@ export function IncidentMemoryPanel({ incidents, onResolve, busy }: Props) {
                     {!resolved && (
                       <>
                         <label className="block text-xs">
-                          <span className="text-slate-400">
+                          <span className="text-neutral-500">
                             What was the actual cause?
                           </span>
                           <textarea
                             value={cause}
                             onChange={(e) => setCause(e.target.value)}
                             rows={2}
-                            className="mt-1 w-full rounded border border-slate-700 bg-slate-950 px-2 py-1 text-sm text-slate-100 focus:border-emerald-500/60 focus:outline-none"
+                            className="mt-1 w-full rounded-lg border border-neutral-300 bg-white px-2.5 py-1.5 text-sm text-neutral-900 outline-none transition focus:border-[#0071e3] focus:ring-2 focus:ring-[#0071e3]/20"
                           />
                         </label>
                         <label className="block text-xs">
-                          <span className="text-slate-400">What fixed it?</span>
+                          <span className="text-neutral-500">What fixed it?</span>
                           <textarea
                             value={fix}
                             onChange={(e) => setFix(e.target.value)}
                             rows={2}
-                            className="mt-1 w-full rounded border border-slate-700 bg-slate-950 px-2 py-1 text-sm text-slate-100 focus:border-emerald-500/60 focus:outline-none"
+                            className="mt-1 w-full rounded-lg border border-neutral-300 bg-white px-2.5 py-1.5 text-sm text-neutral-900 outline-none transition focus:border-[#0071e3] focus:ring-2 focus:ring-[#0071e3]/20"
                           />
                         </label>
                         <button
                           type="button"
                           disabled={busy || !cause.trim() || !fix.trim()}
                           onClick={() => handleSubmit(inc.id)}
-                          className="rounded-md bg-emerald-500/90 px-3 py-1.5 text-xs font-semibold text-slate-950 transition hover:bg-emerald-400 disabled:cursor-not-allowed disabled:bg-slate-700 disabled:text-slate-400"
+                          className="rounded-lg bg-[#0071e3] px-3.5 py-1.5 text-xs font-semibold text-white transition hover:bg-[#0058b9] disabled:cursor-not-allowed disabled:bg-neutral-300"
                         >
                           Save resolution
                         </button>
@@ -152,19 +152,17 @@ export function IncidentMemoryPanel({ incidents, onResolve, busy }: Props) {
                     )}
 
                     <details className="mt-3">
-                      <summary className="cursor-pointer text-[11px] uppercase tracking-widest text-slate-500">
+                      <summary className="cursor-pointer text-[11px] font-medium uppercase tracking-wider text-neutral-400">
                         Causal chain
                       </summary>
-                      <ol className="mt-1 space-y-1 text-xs text-slate-300">
+                      <ol className="mt-1.5 space-y-1 text-xs text-neutral-600">
                         {inc.chain.map((l, idx) => (
                           <li key={idx}>
-                            <span className="font-mono text-slate-100">
-                              {l.service}
-                            </span>{" "}
-                            <span className="text-slate-500">
+                            <span className="font-mono text-neutral-800">{l.service}</span>{" "}
+                            <span className="text-neutral-400">
                               (+{l.ts_offset_secs.toFixed(1)}s)
                             </span>{" "}
-                            <span className="text-slate-400">— {l.sample}</span>
+                            <span className="text-neutral-500">— {l.sample}</span>
                           </li>
                         ))}
                       </ol>

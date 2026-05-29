@@ -15,48 +15,45 @@ interface Props {
 function formatTime(ts: number) {
   const d = new Date(ts);
   return (
-    d.toTimeString().slice(0, 8) + "." +
-    String(d.getMilliseconds()).padStart(3, "0")
+    d.toTimeString().slice(0, 8) + "." + String(d.getMilliseconds()).padStart(3, "0")
   );
 }
 
 export function ActivityLog({ entries }: Props) {
   return (
-    <section className="px-6 pb-8">
-      <div className="rounded-lg border border-slate-800/80 bg-slate-900/40 p-5">
+    <section className="px-6 pb-6">
+      <div className="rounded-2xl bg-white p-5 shadow-card ring-1 ring-neutral-200/60">
         <div className="flex items-center justify-between">
-          <div className="text-[11px] uppercase tracking-widest text-slate-400">
+          <div className="text-[11px] font-medium uppercase tracking-wider text-neutral-400">
             Activity
           </div>
-          <div className="text-[11px] font-mono text-slate-500">
+          <div className="font-mono text-[11px] text-neutral-400">
             {entries.length} event{entries.length === 1 ? "" : "s"}
           </div>
         </div>
-        <div className="mt-3 max-h-72 overflow-y-auto font-mono text-xs leading-6 text-slate-300">
+        <div className="mt-3 max-h-72 overflow-y-auto font-mono text-xs leading-6 text-neutral-600">
           {entries.length === 0 && (
-            <div className="text-slate-500">
+            <div className="text-neutral-400">
               Waiting for activity — status polls every 2 seconds.
             </div>
           )}
           {entries.map((e) => (
             <div key={e.id} className="flex items-center gap-3 py-0.5">
-              <span className="text-slate-500">{formatTime(e.ts)}</span>
+              <span className="text-neutral-400">{formatTime(e.ts)}</span>
               <span
                 className={
                   e.direction === "out"
-                    ? "text-emerald-400"
+                    ? "text-[#0071e3]"
                     : e.ok
-                      ? "text-slate-400"
-                      : "text-rose-400"
+                      ? "text-neutral-400"
+                      : "text-rose-500"
                 }
               >
                 {e.direction === "out" ? "→" : "←"}
               </span>
-              <span className="text-slate-200">{e.label}</span>
-              <span className="text-slate-500 truncate">{e.detail}</span>
-              <span className="ml-auto text-slate-600">
-                {e.latency_ms.toFixed(0)}ms
-              </span>
+              <span className="text-neutral-800">{e.label}</span>
+              <span className="truncate text-neutral-400">{e.detail}</span>
+              <span className="ml-auto text-neutral-300">{e.latency_ms.toFixed(0)}ms</span>
             </div>
           ))}
         </div>

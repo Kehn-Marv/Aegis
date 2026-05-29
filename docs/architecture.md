@@ -1,9 +1,104 @@
 # Aegis — technical architecture (deep dive)
 
-The high-level architecture diagram lives at the root in
-[`../ARCHITECTURE.md`](../ARCHITECTURE.md). This page expands on the data
-flows, the per-stage state machines, and the assumptions Aegis makes
-about its environment.
+The at-a-glance diagram and the three submission-required highlights (Splunk
+interaction, AI integration, data flow) live at the root in
+[`../architecture_diagram.md`](../architecture_diagram.md). This page is the
+deep dive: the full system diagram, per-stage state machines, the data
+flows, and the assumptions Aegis makes about its environment.
+
+Aegis is one Rust daemon and four optional companions — a self-driving
+Python **workload** microservice that produces the telemetry, a Python **AI
+sidecar**, a React **control panel**, and an autonomous Python **agent**.
+Every in-process pillar runs inside the same `aegis-daemon` process and
+shares a single `Arc<Control>` + `Arc<Queue>` + `Arc<IncidentStore>` — no
+internal IPC, no second database, no service mesh.
+
+```mermaid
+flowchart LR
+    subgraph Edge["Local edge"]
+        WL["Workload microservice<br/>OTel logs · metrics · traces"]
+        subgraph Aegis["aegis-daemon (Rust)"]
+            ING["Ingest<br/>TCP / UDP"]
+            DEDUP["Noise gate<br/>signature hash · windowed dedup"]
+            CAUSAL["Causal chain<br/>per-service ring buffer · earliest-first"]
+            MEM[("Incident memory<br/>SQLite fingerprints · similarity search")]
+            DECISION["Decision engine<br/>green / orange / red<br/>+ business impact"]
+            SILENCE["Silent-service<br/>detector"]
+            QUEUE[("Priority queue<br/>SQLite, anomaly-first")]
+            MCPSRV["MCP server +<br/>REST control API"]
+            SELFM["Self-metrics"]
+        end
+        SIDECAR["Python AI sidecar<br/>MiniLM embeddings<br/>(optional)"]
+        UI["React UI<br/>decision card + memory"]
+        AGENT["AegisOps agent<br/>observe → reason → act"]
+        OLLAMA["Local Ollama<br/>(optional brain)"]
+        COL["OTel Collector"]
+    end
+
+    subgraph Splunk["Splunk"]
+        HEC[/"HEC"/]
+        INDEX[("Indexed events<br/>raw · metric · causal · decision<br/>incident · silent · selfmetric · agent")]
+        DASH["Dashboard Studio<br/>4-pillar dashboard"]
+        SMCP["Splunk MCP Server"]
+        AITK["AI Toolkit<br/>| ai SPL"]
+        CDTSM["CDTSM forecast"]
+        HOSTED["Splunk Hosted Models"]
+        subgraph SPLUNKAPP["Aegis AI app (Splunkbase-shaped)"]
+            ALERT["Custom Alert Action<br/>aegis_severity_assessment"]
+            CSC["Custom Search Cmd<br/>| aegisreason"]
+            SDKAGENT["splunklib.ai Agent"]
+        end
+    end
+
+    EXTAGENT["External AI agent<br/>Cursor / Claude Desktop"]
+
+    WL -->|raw stream| ING
+    WL -->|OTLP| COL
+    COL --> HEC
+    ING --> DEDUP
+    DEDUP <-->|classify| SIDECAR
+    DEDUP --> CAUSAL
+    CAUSAL --> SILENCE
+    SILENCE --> DECISION
+    DECISION <-->|fingerprint + search| MEM
+    DECISION --> QUEUE
+    QUEUE --> HEC
+    SELFM --> HEC
+    HEC --> INDEX
+    INDEX --> DASH
+    INDEX --> CDTSM
+    CDTSM -->|forecast| DASH
+
+    UI <-->|REST + watch| MCPSRV
+    EXTAGENT <-->|MCP tools/call| MCPSRV
+    EXTAGENT <-->|MCP tools/call| SMCP
+
+    AGENT -->|REST /api/decision| MCPSRV
+    AGENT --> OLLAMA
+    AGENT -.->|MCP tools/call| SMCP
+    AGENT -->|audit HEC| HEC
+
+    INDEX -->|saved-search trigger| ALERT
+    ALERT --> SDKAGENT
+    CSC --> SDKAGENT
+    SDKAGENT -->|OpenAI-compat| OLLAMA
+    AITK -->|provider=splunk_hosted| HOSTED
+
+    MCPSRV -.->|live Arc&lt;Control&gt;| DEDUP
+    MCPSRV -.->|live Arc&lt;Store&gt;| MEM
+```
+
+## The four pillars
+
+| # | Pillar             | Where it lives                                                                 |
+|---|--------------------|---------------------------------------------------------------------------------|
+| 1 | **Noise gate**     | `gateway/aegis-core/src/{signature,dedup,summary}.rs`                            |
+| 2 | **Causal chain**   | `gateway/aegis-core/src/{service,causal}.rs`                                     |
+| 3 | **Incident memory**| `gateway/aegis-core/src/incident_memory.rs` (SQLite, local, free)                |
+| 4 | **Decision card**  | `gateway/aegis-core/src/{decision,service_catalog}.rs`                           |
+
+Plus a silent-service detector in `gateway/aegis-core/src/silence.rs` and a
+control-plane surface in `gateway/aegis-mcp/`.
 
 ## The single-daemon model
 
@@ -166,12 +261,37 @@ daemon's RSS sits well under 100 MB on Windows / Linux / macOS.
 
 ## File map
 
-See [`../ARCHITECTURE.md`](../ARCHITECTURE.md) for the canonical file
-map. The crate boundaries are:
+```text
+.
+├── README.md                  Quick start: Docker + demo + Path B + Path C
+├── architecture_diagram.md    At-a-glance diagram (submission requirement)
+├── Troubleshooting.md         Symptom → fix reference
+├── LICENSE                    MIT
+├── Dockerfile                 Single-container build (gateway + UI + workload)
+├── docker-compose.yml         One-command run
+├── Cargo.toml                 Rust workspace manifest
+├── rust-toolchain.toml        Pinned stable Rust
+├── gateway/                   Rust workspace
+│   ├── aegis-core/            ingest, signature, dedup, causal, memory, decision, queue, HEC
+│   ├── aegis-mcp/             MCP HTTP server + REST control API + UI hosting
+│   └── aegis-daemon/          binary that wires it all together
+├── microservice/             Self-driving telemetry workload (FastAPI + OTel)
+├── sidecar/                   Python AI sidecar (optional)
+├── agent/                     AegisOps autonomous agent
+├── apps/aegis_ai/             Splunkbase-shaped Splunk app
+├── ui/                        React control panel
+├── dashboards/                Splunk Dashboard Studio JSON
+├── configs/                   TOML configs (demo + live + multi-edge + docker)
+├── demo/                      log_spammer.py + canned smoke fixtures
+└── docs/                      Deep-dive docs (this file, MCP, FinOps, …)
+```
+
+The crate boundaries are:
 
 * `aegis-core` — pure library. No knowledge of MCP or daemon
   bootstrap. Reused by both the daemon and the MCP crate.
-* `aegis-mcp` — `rmcp` + `axum` glue. Owns the public HTTP surface.
+* `aegis-mcp` — `rmcp` + `axum` glue. Owns the public HTTP surface
+  (REST + MCP) and serves the built control-panel UI.
 * `aegis-daemon` — thin binary that constructs the shared
   `Control` / `Queue` / `IncidentStore` and runs both pipeline and
   MCP server.

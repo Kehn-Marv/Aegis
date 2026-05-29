@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="color-scheme" content="light" />
+    <title>Aegis Workload — Live Telemetry</title>
+    <link rel="stylesheet" href="/styles.css" />
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' rx='22' fill='%230a84ff'/%3E%3Ctext x='50' y='70' font-size='62' text-anchor='middle' fill='white' font-family='sans-serif'%3E%E2%96%B2%3C/text%3E%3C/svg%3E" />
+  </head>
+  <body>
+    <div class="wrap">
+      <div class="topbar">
+        <div class="brand">
+          <div class="mark">&#9650;</div>
+          <div>
+            <h1>Aegis Workload</h1>
+            <p>Self-driving service fleet &middot; logs, metrics &amp; traces &rarr; OpenTelemetry &amp; the Aegis gateway</p>
+          </div>
+        </div>
+        <div class="health" id="health">
+          <span class="dot" id="health-dot"></span>
+          <span id="health-label">connecting&hellip;</span>
+        </div>
+      </div>
+
+      <div class="stats" id="stats"></div>
+
+      <div class="banner" id="banner">
+        <span class="pill" id="banner-pill"></span>
+        <div>
+          <b id="banner-title"></b>
+          <div class="sum" id="banner-sum"></div>
+        </div>
+        <div class="timer" id="banner-timer"></div>
+      </div>
+
+      <div class="grid">
+        <div class="col">
+          <section class="card">
+            <header>
+              <h2>Service fleet</h2>
+              <span class="meta" id="fleet-meta"></span>
+            </header>
+            <div class="body"><div class="fleet" id="fleet"></div></div>
+          </section>
+
+          <section class="card">
+            <header>
+              <h2>Live activity</h2>
+              <span class="meta">auto-injected incidents &amp; recovery</span>
+            </header>
+            <div class="body"><div class="feed" id="feed"></div></div>
+          </section>
+        </div>
+
+        <div class="col">
+          <section class="card">
+            <header>
+              <h2>Telemetry signals</h2>
+              <span class="meta">OpenTelemetry</span>
+            </header>
+            <div class="body" id="signals"></div>
+          </section>
+
+          <section class="card">
+            <header><h2>Aegis gateway</h2><span class="meta">raw log egress</span></header>
+            <div class="body" id="gateway"></div>
+          </section>
+
+          <section class="card">
+            <header><h2>Autopilot</h2><span class="meta">hands-off</span></header>
+            <div class="body" id="controls"></div>
+          </section>
+        </div>
+      </div>
+
+      <div class="footer">
+        Aegis Workload &middot; <code>GET /api/state</code> &middot; OTLP &rarr; <code>OTEL_EXPORTER_OTLP_ENDPOINT</code> &middot; raw logs &rarr; <code>tcp/5140</code>
+      </div>
+    </div>
+
+    <script src="/app.js"></script>
+  </body>
+</html>

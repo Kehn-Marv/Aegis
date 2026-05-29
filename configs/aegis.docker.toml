@@ -1,0 +1,75 @@
+# Aegis gateway config for the single-container image.
+#
+# Self-contained by design: no [hec] block, so the gateway runs its full
+# in-process pipeline (dedup → causal → decision → memory) and serves the
+# control panel + REST/MCP API without needing Splunk. The bundled workload
+# feeds it automatically.
+#
+# To ship to Splunk, uncomment [hec], set your token (or run the OTel
+# Collector via `docker compose --profile splunk up`), and restart.
+
+# [hec]
+# endpoint     = "https://host.docker.internal:8088/services/collector/event"
+# token        = "PUT-YOUR-HEC-TOKEN-HERE"
+# index        = "aegis"
+# host         = "aegis-edge-docker"
+# timeout_secs = 10
+# verify_tls   = false
+
+[ingest]
+tcp_listen = "0.0.0.0:5140"
+udp_listen = "0.0.0.0:5141"
+
+[dedup]
+window_secs         = 5
+max_open_signatures = 4096
+
+[queue]
+path                   = "data/aegis-queue.sqlite"
+max_disk_bytes         = 1073741824
+priority_anomaly_first = true
+
+[sidecar]
+enabled = false
+
+[mcp]
+http_listen = "0.0.0.0:7321"
+
+[self_metrics]
+source     = "aegis:self"
+sourcetype = "aegis:selfmetric"
+flush_secs = 15
+
+# Tuned for the bundled workload's autopilot cadence: it injects an incident
+# every ~75-150s, so a 60s causal window catches each cascade and a 60s
+# cooldown emits one chain per incident.
+[causal]
+window_secs   = 60
+min_services  = 3
+cooldown_secs = 60
+
+[memory]
+path           = "data/aegis-incidents.sqlite"
+top_matches    = 3
+min_similarity = 0.25
+
+# Card flips back to green ~45s after the last chain, so each auto-incident
+# shows up red and then clears on its own.
+[decision]
+idle_to_green_secs = 45
+
+[silence]
+silence_secs = 120
+sweep_secs   = 10
+enabled      = true
+
+[services]
+"api-gateway"   = "Edge router and TLS termination for all inbound traffic."
+"auth"          = "Authentication and session issuance."
+"session-cache" = "Hot path cache for active user sessions."
+"checkout"      = "Customer-facing checkout flow."
+"payment-api"   = "Handles all transaction processing."
+"orders"        = "Order fulfilment pipeline."
+"inventory"     = "Stock levels and reservations."
+"ledger-db"     = "Double-entry transaction ledger."
+"notifications" = "Email / push receipts."

@@ -13,24 +13,20 @@ interface TileProps {
 
 function Tile({ label, value, sublabel, accent = "neutral" }: TileProps) {
   const accentClass = {
-    good: "text-emerald-300",
-    warn: "text-amber-300",
-    bad: "text-rose-300",
-    neutral: "text-slate-100",
+    good: "text-emerald-600",
+    warn: "text-amber-600",
+    bad: "text-rose-600",
+    neutral: "text-neutral-900",
   }[accent];
   return (
-    <div className="rounded-lg border border-slate-800/80 bg-slate-900/40 p-5 backdrop-blur">
-      <div className="text-[11px] uppercase tracking-widest text-slate-400">
+    <div className="rounded-2xl bg-white p-5 shadow-card ring-1 ring-neutral-200/60">
+      <div className="text-[11px] font-medium uppercase tracking-wider text-neutral-400">
         {label}
       </div>
-      <div
-        className={`mt-3 font-mono text-3xl font-semibold tabular-nums ${accentClass}`}
-      >
+      <div className={`mt-3 font-mono text-3xl font-semibold tabular-nums tracking-tight ${accentClass}`}>
         {value}
       </div>
-      {sublabel && (
-        <div className="mt-1 text-xs text-slate-500">{sublabel}</div>
-      )}
+      {sublabel && <div className="mt-1 text-xs text-neutral-500">{sublabel}</div>}
     </div>
   );
 }
@@ -53,7 +49,7 @@ export function StatusTiles({ status }: Props) {
     : "neutral";
 
   return (
-    <section className="grid grid-cols-1 gap-4 px-6 py-6 md:grid-cols-3">
+    <section className="grid grid-cols-1 gap-4 px-6 py-2 md:grid-cols-3">
       <Tile
         label="Noise Stopped"
         value={dedupPct}

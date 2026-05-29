@@ -1,0 +1,44 @@
+# One command to run the whole project:
+#
+#   docker compose up --build
+#     → Aegis control panel   http://localhost:7321
+#     → Workload control room http://localhost:8080
+#
+# Everything (gateway + UI + self-driving workload) runs in the single `aegis`
+# container. The optional collector below ships the workload's OpenTelemetry
+# logs/metrics/traces to Splunk; enable it with:
+#
+#   set OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector:4318
+#   set SPLUNK_HEC_TOKEN=<your-token>
+#   docker compose --profile splunk up --build
+
+services:
+  aegis:
+    build: .
+    image: aegis:latest
+    container_name: aegis
+    ports:
+      - "7321:7321"   # control panel + REST + MCP
+      - "8080:8080"   # workload control room
+      - "5140:5140"   # raw log ingest (for external sources, optional)
+    environment:
+      SIM_AUTOPILOT: "true"
+      # Empty by default (no export). Point at the collector for the Splunk path.
+      OTEL_EXPORTER_OTLP_ENDPOINT: "${OTEL_EXPORTER_OTLP_ENDPOINT:-}"
+    restart: unless-stopped
+
+  otel-collector:
+    profiles: ["splunk"]
+    image: otel/opentelemetry-collector-contrib:0.130.1
+    container_name: aegis-otelcol
+    command: ["--config", "/etc/otelcol/config.yaml"]
+    volumes:
+      - ./microservice/otel-collector-config.yaml:/etc/otelcol/config.yaml:ro
+    environment:
+      SPLUNK_HEC_URL: "${SPLUNK_HEC_URL:-https://host.docker.internal:8088/services/collector}"
+      SPLUNK_HEC_TOKEN: "${SPLUNK_HEC_TOKEN:-}"
+      SPLUNK_INDEX: "${SPLUNK_INDEX:-aegis}"
+    ports:
+      - "4317:4317"
+      - "4318:4318"
+    restart: unless-stopped

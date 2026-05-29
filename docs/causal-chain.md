@@ -8,8 +8,12 @@ broke after it is collateral damage.
 
 The dedup stage already emits one `FirstOccurrence` event the first time
 a new signature is seen — that's the moment of "this is new". The causal
-engine watches every `FirstOccurrence`, tags it with the service that
-produced it, and keeps a small ring buffer per service.
+engine watches every **anomalous** `FirstOccurrence` (errors, warnings, and
+stack-trace continuations), tags it with the service that produced it, and
+keeps a small ring buffer per service. Routine `INFO`/`DEBUG` first-sightings
+are ignored: a healthy service simply being *seen* for the first time is not
+evidence of an incident, so a busy multi-service fleet never looks like a
+perpetual outage.
 
 On each event, the engine asks: *in the last `window_secs`, how many
 distinct services first-fired a new signature?* If the count crosses
@@ -66,6 +70,7 @@ fn score_confidence(chain: &[CausalLink]) -> f32 {
 
 | Scenario                                              | Behaviour                                                            |
 |-------------------------------------------------------|----------------------------------------------------------------------|
+| Routine `INFO`/`DEBUG` first-sightings                | Ignored. Only anomalous (WARN/ERROR) lines seed a chain.            |
 | One service spamming many signatures                  | Does **not** fire. We require distinct *services*, not signatures.   |
 | Two services failing simultaneously                   | Fires, but confidence is low (~0.65). Operator sees the ambiguity.  |
 | Long-running outage (hours)                           | Fires once. `cooldown_secs` suppresses re-emission for the same root.|

@@ -1,0 +1,35 @@
+# Build artifacts — rebuilt inside the image
+target/
+**/node_modules/
+ui/dist/
+**/__pycache__/
+**/*.py[cod]
+**/.venv/
+**/*.egg-info/
+
+# Runtime data + logs
+data/
+*.sqlite
+*.sqlite-*
+*.log
+
+# VCS / IDE / OS
+.git/
+.gitignore
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Local secrets / configs (never bake into the image)
+configs/aegis.toml
+configs/aegis-us-east.toml
+configs/aegis-eu-west.toml
+agent/configs/aegis-ops.toml
+.env
+.env.*
+
+# Docs / scratch not needed at build time
+docs/
+*.md
+!microservice/README.md

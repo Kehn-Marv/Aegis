@@ -1,8 +1,9 @@
 # Aegis
 
-> **Aegis stops the noise, finds what broke first, and remembers every incident
-> your team has ever had — so when it happens again, it tells you exactly what
-> fixed it last time.**
+> **On-call shouldn't mean on-edge.** Aegis sits between your services and
+> Splunk: it silences the alert storms, names the service that broke *first*,
+> and remembers how every past incident was fixed — so when production breaks
+> again, you already have the answer.
 
 [![License: MIT](https://img.shields.io/badge/license-MIT-3DDC97?style=flat-square)](LICENSE)
 [![Rust](https://img.shields.io/badge/rust-stable-EB6228?style=flat-square&logo=rust)](Cargo.toml)
@@ -16,37 +17,38 @@ Splunk Agentic Ops Hackathon 2026 · Observability track.
 
 ## What Aegis does, in plain English
 
-Aegis sits between your services and Splunk. It does four things:
+A service crash-loops at 3 AM and fires the same error 10,000 times. Aegis
+does four things so you don't have to:
 
-1. **Stops the noise.** A service crash-loops and fires the same error 10,000
-   times. Aegis sends *one* full copy and collapses the rest into a single
-   count, so your ingest bill stops exploding during outages.
+1. **Stops the panic — and the noise.** Instead of drowning you in alerts and
+   exploding your ingest bill during an outage, Aegis sends *one* full copy of
+   a repeating error and collapses the rest into a single clean count.
 
-2. **Finds what broke first.** When several services start failing in the same
-   window, Aegis picks the one that broke earliest and says *that's the root
-   cause; everything after it is collateral damage.* Output is one sentence,
-   not 200 alerts.
+2. **Finds patient zero.** When a whole cluster starts failing, Aegis isolates
+   the service that broke *earliest* and filters out the collateral damage.
+   You get one clear sentence — not 200 alerts.
 
-3. **Remembers every incident.** When the engineer fixes it, Aegis asks two
-   questions — *what was the cause?* and *what fixed it?* — and stores both.
-   Six months later when the same shape happens again, Aegis surfaces the
-   fix that worked last time.
+3. **Builds institutional memory.** When the fire is out, Aegis asks two
+   questions — *what was the cause?* and *what fixed it?* Six months later,
+   when the same shape appears, it surfaces the exact solution that worked
+   last time. No reinventing the wheel under pressure.
 
-4. **Gives the engineer one focused decision moment.** Instead of an "Execute"
-   button that prods production, Aegis shows a single card: root cause,
-   similar past fix, suggested next step, and three buttons — `I'm on it`,
-   `Show me more`, `This looks different`. The engineer is in control.
+4. **Gives you back control.** Instead of a terrifying "Execute" button, Aegis
+   shows one focused decision card — root cause, past fix, suggested next
+   step, and three buttons: `I'm on it`, `Show me more`, `This looks
+   different`. You stay in the driver's seat; Aegis never reaches into
+   production.
 
-It's local, free, and fast. SQLite for memory. Rust for the hot path. No
-external services required.
+It's local, free, and fast. SQLite for memory. Rust for a bulletproof hot
+path. No external services required.
 
 ```text
-                          ┌─────────────┐
-   apps ──raw logs──▶     │   Aegis     │  ──processed events──▶  Splunk
-                          │   gateway   │
-                          └──────┬──────┘
-                                 │
-                          decision card (UI / MCP / Splunk dashboard)
+   workload app ──raw logs──▶  ┌─────────────┐
+                               │    Aegis    │  ──processed events──▶  Splunk
+   (OpenTelemetry) ──OTLP──▶   │   gateway   │
+                               └──────┬──────┘
+                                      │
+                          decision card (UI · MCP · Splunk dashboard)
 ```
 
 ---
@@ -56,23 +58,27 @@ external services required.
 ```text
 gateway/        Rust workspace (data plane + MCP control plane)
 ├── aegis-core/     noise gate, causal chain, incident memory, decision engine
-├── aegis-mcp/      MCP server + REST API
+├── aegis-mcp/      MCP server + REST API + serves the control-panel UI
 └── aegis-daemon/   binary that wires it all together
+microservice/   Self-driving telemetry workload (FastAPI + OpenTelemetry)
+ui/             React control panel — decision card hero + incident memory list
 sidecar/        Optional Python service for embedding-based classification
 agent/          AegisOps autonomous agent (observes the gateway, reasons with an LLM)
 apps/aegis_ai/  Splunkbase-shaped Splunk app (Custom Alert Action + |aegisreason SPL)
-ui/             React control panel — decision card hero + incident memory list
 dashboards/     Splunk Dashboard Studio JSON
-configs/        TOML configs (demo + live + multi-edge)
-demo/           log_spammer.py traffic generator
+configs/        TOML configs (demo + live + multi-edge + docker)
+demo/           log_spammer.py traffic generator (manual alternative to the workload)
 docs/           deep-dive docs (architecture, MCP, FinOps math, CDTSM, …)
+Dockerfile, docker-compose.yml   one-container build of the whole project
 ```
 
 The first place to look:
 
 | Topic                  | File                                                                |
 |------------------------|---------------------------------------------------------------------|
-| Architecture           | [`ARCHITECTURE.md`](ARCHITECTURE.md)                                 |
+| Architecture diagram   | [`architecture_diagram.md`](architecture_diagram.md)                 |
+| Architecture deep dive | [`docs/architecture.md`](docs/architecture.md)                       |
+| Telemetry workload     | [`microservice/README.md`](microservice/README.md)                   |
 | Causal chain detection | [`docs/causal-chain.md`](docs/causal-chain.md)                       |
 | Incident memory        | [`docs/memory.md`](docs/memory.md)                                   |
 | Decision card          | [`docs/decision-card.md`](docs/decision-card.md)                     |
@@ -84,17 +90,48 @@ The first place to look:
 
 ## The setup paths
 
-Pick the one that matches what you want to see. All three share the same
-prerequisites: **Rust 1.80+**, **Python 3.11+**, and (on Windows) MSVC Build
-Tools (Cargo will prompt you on first build).
+Pick the one that matches what you want to see.
 
-| Path | What you get                                                               | Time          |
-|------|----------------------------------------------------------------------------|---------------|
-| **A** | Run the gateway, fire a cascade, watch Aegis recall its own past fixes.   | ~5 minutes    |
-| **B** | Path A plus Splunk Enterprise: HEC ingest, AI sidecar, full dashboard.    | ~45 minutes\* |
-| **C** | Path B plus two regional gateways and the autonomous AegisOps agent.      | +15 minutes   |
+| Path | What you get                                                                                    | Needs                       | Time           |
+|------|-------------------------------------------------------------------------------------------------|-----------------------------|----------------|
+| **0 — Docker** | One command. Gateway + both UIs + the self-driving workload, in one container.        | Docker                      | ~3 min + build |
+| **A** | Run the gateway from source, fire a cascade, watch Aegis recall its own past fixes.            | Rust, Python                | ~5 minutes     |
+| **B** | Path A plus Splunk Enterprise: HEC ingest, AI sidecar, full dashboard.                         | + Splunk                    | ~45 minutes\*  |
+| **C** | Path B plus two regional gateways and the autonomous AegisOps agent.                           | + Ollama                    | +15 minutes    |
+
+From-source paths need **Rust 1.80+**, **Python 3.11+**, **Node 20+** (for the
+UI), and (on Windows) MSVC Build Tools (Cargo prompts you on first build).
 
 \* Most of Path B's time is installing Splunk Enterprise + AI Toolkit, not Aegis.
+
+---
+
+## Path 0 — One container (the fastest look)
+
+Everything in one image: the Rust gateway, the React control panel (served by
+the gateway), and the self-driving **workload** that generates the telemetry.
+
+```powershell
+docker compose up --build
+```
+
+* **Aegis control panel** → http://localhost:7321
+* **Workload control room** → http://localhost:8080
+
+That's the whole setup. The workload emits healthy traffic immediately and
+injects an incident (cascade, crash-loop, latency spike, silence) every minute
+or two **on its own** — open the control panel and watch a real decision card
+form, name patient zero, and recall past fixes. No Splunk required: the gateway
+runs its full in-process pipeline locally.
+
+To ship the workload's OpenTelemetry logs/metrics/traces to Splunk, add the
+collector profile:
+
+```powershell
+$env:SPLUNK_HEC_TOKEN = "<your-hec-token>"
+$env:OTEL_EXPORTER_OTLP_ENDPOINT = "http://otel-collector:4318"
+docker compose --profile splunk up --build
+```
 
 ---
 
@@ -105,21 +142,38 @@ Tools (Cargo will prompt you on first build).
 ```powershell
 git clone https://github.com/<your-handle>/aegis
 cd aegis
-cargo test --workspace          # 51 Rust tests should pass
+cargo test --workspace          # 52 Rust tests should pass
 cargo build --bin aegis-daemon
 .\target\debug\aegis-daemon.exe --config configs\aegis.demo.toml
 ```
 
-### A2. Send a multi-service incident
+If you've built the UI once (`cd ui; npm install; npm run build`), the daemon
+also serves the control panel at **http://localhost:7321** — no separate
+server needed.
 
-In a second terminal:
+### A2. Send traffic — the automatic way
+
+In a second terminal, start the self-driving **workload**. It connects to the
+gateway and injects realistic incidents on its own (and exposes its own bright
+control room at http://localhost:8080):
 
 ```powershell
-# A multi-service cascade (~10s): payment-api → checkout → orders
+cd microservice
+py -m venv .venv
+.\.venv\Scripts\Activate.ps1
+pip install -e .
+python -m workload
+```
+
+Prefer to drive it by hand? The `log_spammer.py` generator fires one pattern on
+demand:
+
+```powershell
+# A multi-service cascade (~16s): payment-api → checkout → orders
 python demo\log_spammer.py --target tcp://127.0.0.1:5140 --pattern cascade
 ```
 
-Other patterns to try: `crashloop` (dedup demo), `routine` (idle traffic),
+Other manual patterns: `crashloop` (dedup demo), `routine` (idle traffic),
 `silence` (silent-service detector demo).
 
 ### A3. Watch the decision card appear
@@ -165,11 +219,21 @@ Re-run the cascade. The new decision card now carries the past fix:
 That's Aegis. The institutional memory of every previous on-call, at the
 fingertips of the new one.
 
-### A5. (Optional) See the live control panel
+### A5. See the live control panel
+
+The daemon serves the control panel itself at **http://localhost:7321** once
+the UI has been built — just open it:
 
 ```powershell
 cd ui
 npm install         # first time only, ~1 minute
+npm run build       # outputs ui/dist; restart the daemon and it serves :7321
+```
+
+For UI development with hot reload, run the Vite dev server instead (it proxies
+the API to the daemon):
+
+```powershell
 npm run dev         # http://localhost:5173
 ```
 

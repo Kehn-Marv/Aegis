@@ -1,7 +1,8 @@
 # Rust
 /target/
 **/*.rs.bk
-Cargo.lock
+# Cargo.lock IS committed: this repo ships a binary application, so a locked,
+# reproducible dependency graph is what prevents "works on my machine".
 
 # Python
 __pycache__/

@@ -53,41 +53,6 @@ path. No external services required.
 
 ---
 
-## What's in this repo
-
-```text
-gateway/        Rust workspace (data plane + MCP control plane)
-├── aegis-core/     noise gate, causal chain, incident memory, decision engine
-├── aegis-mcp/      MCP server + REST API + serves the control-panel UI
-└── aegis-daemon/   binary that wires it all together
-microservice/   Self-driving telemetry workload (FastAPI + OpenTelemetry)
-ui/             React control panel — decision card hero + incident memory list
-sidecar/        Optional Python service for embedding-based classification
-agent/          AegisOps autonomous agent (observes the gateway, reasons with an LLM)
-apps/aegis_ai/  Splunkbase-shaped Splunk app (Custom Alert Action + |aegisreason SPL)
-dashboards/     Splunk Dashboard Studio JSON
-configs/        TOML configs (demo + live + multi-edge + docker)
-demo/           log_spammer.py traffic generator (manual alternative to the workload)
-docs/           deep-dive docs (architecture, MCP, FinOps math, CDTSM, …)
-Dockerfile, docker-compose.yml   one-container build of the whole project
-```
-
-The first place to look:
-
-| Topic                  | File                                                                |
-|------------------------|---------------------------------------------------------------------|
-| Architecture diagram   | [`architecture_diagram.md`](architecture_diagram.md)                 |
-| Architecture deep dive | [`docs/architecture.md`](docs/architecture.md)                       |
-| Telemetry workload     | [`microservice/README.md`](microservice/README.md)                   |
-| Causal chain detection | [`docs/causal-chain.md`](docs/causal-chain.md)                       |
-| Incident memory        | [`docs/memory.md`](docs/memory.md)                                   |
-| Decision card          | [`docs/decision-card.md`](docs/decision-card.md)                     |
-| FinOps math            | [`docs/finops-math.md`](docs/finops-math.md)                         |
-| MCP bidirectional      | [`docs/mcp.md`](docs/mcp.md)                                         |
-| Troubleshooting        | [`Troubleshooting.md`](Troubleshooting.md)                           |
-
----
-
 ## The setup paths
 
 Pick the one that matches what you want to see.

@@ -76,8 +76,7 @@ human saw a problem.
 
 ## Why CDTSM specifically (and not the legacy MLTK forecasters)
 
-The hackathon **Best Use of Splunk Hosted Models** prize specifically
-calls out the Cisco Deep Time Series Model (CDTSM). It's:
+CDTSM is the right fit for Aegis because it's:
 
 * A **foundation model** — no `| fit` step needed, the dashboard panel
   uses it inference-only with `| apply CDTSM`.

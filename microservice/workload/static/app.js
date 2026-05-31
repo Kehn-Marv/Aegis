@@ -53,7 +53,7 @@ function stat(k, v, sub) {
 function renderStats(s) {
   const res = s.resources || {};
   $("stats").innerHTML = [
-    stat("Throughput", last.rps + "<span style='font-size:14px;color:var(--text-3)'>/s</span>", fmt.format(s.total_requests) + " total"),
+    stat("Throughput", last.rps + "<span style='font-size:12px;color:var(--ink-light)'>/s</span>", fmt.format(s.total_requests) + " total"),
     stat("Error rate", (s.error_rate * 100).toFixed(2) + "%", fmt.format(s.total_errors) + " failed"),
     stat("CPU", (res.cpu ?? 0) + "%", "fleet average"),
     stat("Memory", fmt.format(Math.round(res.memory ?? 0)) + " MiB", "resident"),
@@ -85,7 +85,7 @@ function renderFleet(s) {
         <div class="top"><span class="dot ${dotCls}"></span><span class="name">${svc.name}</span></div>
         <div class="role">${svc.role}</div>
         <div class="nums">
-          <div>p95<b>${svc.p95_ms}<span style="font-size:11px;color:var(--text-3)">ms</span></b></div>
+          <div>p95<b>${svc.p95_ms}<span style="font-size:9px;color:var(--ink-light)">ms</span></b></div>
           <div>errors<b>${(svc.error_rate * 100).toFixed(1)}%</b></div>
           <div>reqs<b>${fmt.format(svc.requests)}</b></div>
         </div>
@@ -128,8 +128,8 @@ function renderControls(s) {
   $("controls").innerHTML = `
     <div class="toggle" id="ap-toggle">
       <span class="switch ${s.autopilot ? "on" : ""}" id="ap-switch"></span>
-      <div><div class="label" style="font-weight:550">Autopilot</div>
-      <div class="desc" style="font-size:12px;color:var(--text-3)">${
+      <div><div class="label" style="font-weight:900;color:var(--ink);font-size:12px">${s.autopilot ? "On" : "Off"}</div>
+      <div class="desc" style="font-size:10px;color:var(--ink-light)">${
         s.autopilot
           ? next != null
             ? `next incident in ~${next}s`
@@ -159,7 +159,7 @@ function renderFeed(s) {
   $("feed").innerHTML =
     (s.events || [])
       .map((e) => `<div class="ev"><time>${t(e.ts)}</time><span class="tag ${e.kind}">${e.kind}</span><span class="msg">${e.message}</span></div>`)
-      .join("") || `<div class="ev"><span class="msg" style="color:var(--text-3)">Waiting for activity…</span></div>`;
+      .join("") || `<div class="ev"><span class="msg" style="color:rgba(255,250,218,0.35)">Waiting for activity…</span></div>`;
 }
 
 poll();

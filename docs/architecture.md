@@ -235,15 +235,15 @@ flag the dedup loop reads on its hot path.
 
 ## Splunk integration touchpoints
 
-| Capability                  | How Aegis uses it                                                                                                            | Targeted prize                       |
-|-----------------------------|------------------------------------------------------------------------------------------------------------------------------|---------------------------------------|
-| **HEC**                     | Primary egress. Seven sourcetypes (`raw`, `metric`, `summary`, `causal`, `decision`, `incident`, `silent`) + `selfmetric`    | Best of Observability                  |
-| **MCP Server (Splunkbase)** | Aegis on both sides: own MCP server (8 tools) + AegisOps Agent as a real MCP client of `splunk_run_query` (auto-detected)   | Best Use of Splunk MCP Server          |
-| **AI Toolkit `\| ai`**      | Three live LLM transports (`ollama`, `aitk_ollama`, `splunk_ai`), one config flag switches between them                     | Best Use of Splunk Hosted Models       |
-| **Hosted Models**           | Default `gpt-oss:20b` matches Hosted Models identifier; one env var flips to true SLIM-backed `gpt-oss-20b`                | Best Use of Splunk Hosted Models       |
-| **CDTSM**                   | Two dashboard forecast panels; AegisOps reads the same forecast and surfaces it as a `PREDICTIVE SIGNAL` in the LLM prompt | Best Use of Splunk Hosted Models       |
-| **`splunklib.ai`**          | Splunkbase app with Custom Alert Action + `\| aegisreason` Custom Search Command — AppInspect clean                          | Best Use of Splunk Developer Tools     |
-| **Dashboard Studio**        | One dashboard with a panel per pillar + the FinOps headlines + CDTSM forecast lines                                          | Best of Observability                  |
+| Capability                  | How Aegis uses it                                                                                                            |
+|-----------------------------|------------------------------------------------------------------------------------------------------------------------------|
+| **HEC**                     | Primary egress. Seven sourcetypes (`raw`, `metric`, `summary`, `causal`, `decision`, `incident`, `silent`) + `selfmetric`    |
+| **MCP Server (Splunkbase)** | Aegis on both sides: own MCP server (8 tools) + AegisOps Agent as a real MCP client of `splunk_run_query` (auto-detected)   |
+| **AI Toolkit `\| ai`**      | Three live LLM transports (`ollama`, `aitk_ollama`, `splunk_ai`), one config flag switches between them                     |
+| **Hosted Models**           | Default `gpt-oss:20b` matches Hosted Models identifier; one env var flips to true SLIM-backed `gpt-oss-20b`                |
+| **CDTSM**                   | Two dashboard forecast panels; AegisOps reads the same forecast and surfaces it as a `PREDICTIVE SIGNAL` in the LLM prompt |
+| **`splunklib.ai`**          | Splunkbase app with Custom Alert Action + `\| aegisreason` Custom Search Command — AppInspect clean                          |
+| **Dashboard Studio**        | One dashboard with a panel per pillar + the FinOps headlines + CDTSM forecast lines                                          |
 
 ## Memory and performance envelope
 

@@ -9,10 +9,7 @@ Protocol:
 | **AegisOps Agent as MCP client** | Our own autonomous agent talks to the **official Splunk MCP Server** (`splunk_run_query`) instead of the raw `/services/search/jobs/oneshot` REST endpoint | `https://<splunk-host>:8089/services/mcp` | Every observational call traverses the same MCP control plane judges will be auditing; full traffic visible in `index=_internal sourcetype=mcpjson "tools/call"` |
 
 The two directions are completely independent — you can enable either,
-both, or neither at deployment time. The narrative for the **Best Use
-of Splunk MCP Server** prize relies on *both*: Aegis publishes
-gateway-control tools via MCP for upstream AI agents to call, *and*
-AegisOps consumes Splunk's official MCP tools to ground its reasoning.
+both, or neither at deployment time.
 
 ## Aegis MCP Server — tools published
 
@@ -185,20 +182,7 @@ index=_internal sourcetype=mcpjson "tools/call" "splunk_run_query"
 | stats count by source
 ```
 
-### Why this matters for the hackathon
-
-The **Best Use of Splunk MCP Server** prize text says:
-
-> Awarded to the team that most effectively leverages the Splunk MCP
-> Server to build intelligent, agent-driven experiences. This prize
-> recognizes solutions that seamlessly connect AI agents to Splunk
-> data, enabling powerful workflows such as automated investigation,
-> contextual insights and real-time decision making. Judges will look
-> for creative implementations that showcase how MCP can orchestrate
-> meaningful actions across observability, security, platform and
-> developer use cases.
-
-Aegis hits this three different ways:
+### How Aegis uses MCP on both sides
 
 1. **AegisOps Agent → Splunk MCP** (this section). Every observation
    the autonomous agent makes is an MCP `tools/call`, with full
@@ -206,9 +190,9 @@ Aegis hits this three different ways:
    timeout, 1000-event cap, etc.).
 2. **External AI agents → Aegis MCP** (sections above). Cursor /
    Claude Desktop / any MCP client can flip edge-gateway switches via
-   Aegis's five tools.
+   Aegis's tools.
 3. **Both endpoints in a single Cursor/Claude session.** The chat-side
-   orchestration block below shows how a single LLM holds tools from
+   orchestration block above shows how a single LLM holds tools from
    *both* Aegis and Splunk in one context — the canonical
    multi-server MCP demo.
 

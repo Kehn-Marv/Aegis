@@ -12,21 +12,29 @@ interface TileProps {
 }
 
 function Tile({ label, value, sublabel, accent = "neutral" }: TileProps) {
-  const accentClass = {
-    good: "text-emerald-600",
-    warn: "text-amber-600",
-    bad: "text-rose-600",
-    neutral: "text-neutral-900",
+  const accentColor = {
+    good: "#44C464",
+    warn: "#D4C020",
+    bad: "#D43020",
+    neutral: "#E87C14",
   }[accent];
+
   return (
-    <div className="rounded-2xl bg-white p-5 shadow-card ring-1 ring-neutral-200/60">
-      <div className="text-[11px] font-medium uppercase tracking-wider text-neutral-400">
+    <div className="console-card flex flex-col gap-3">
+      <div className="text-[9px] font-black uppercase tracking-[1.4px] text-[#6A6245]">
         {label}
       </div>
-      <div className={`mt-3 font-mono text-3xl font-semibold tabular-nums tracking-tight ${accentClass}`}>
-        {value}
+      <div className="lcd-panel flex items-baseline gap-2">
+        <span
+          className="font-mono text-3xl font-black tabular-nums tracking-tight"
+          style={{ color: accentColor }}
+        >
+          {value}
+        </span>
       </div>
-      {sublabel && <div className="mt-1 text-xs text-neutral-500">{sublabel}</div>}
+      {sublabel && (
+        <div className="text-[10px] text-[#6A6245]">{sublabel}</div>
+      )}
     </div>
   );
 }
@@ -41,15 +49,13 @@ export function StatusTiles({ status }: Props) {
   const memory = status ? NUMFMT.format(status.incidents_remembered) : "—";
 
   const dedupAccent: TileProps["accent"] = status
-    ? status.dedup_savings_pct > 80
-      ? "good"
-      : status.dedup_savings_pct > 40
-        ? "warn"
-        : "neutral"
+    ? status.dedup_savings_pct > 80 ? "good"
+      : status.dedup_savings_pct > 40 ? "warn"
+      : "neutral"
     : "neutral";
 
   return (
-    <section className="grid grid-cols-1 gap-4 px-6 py-2 md:grid-cols-3">
+    <section className="grid grid-cols-1 gap-4 px-4 py-2 md:grid-cols-3">
       <Tile
         label="Noise Stopped"
         value={dedupPct}
@@ -60,15 +66,7 @@ export function StatusTiles({ status }: Props) {
         label="Queue Depth"
         value={queue}
         sublabel="events waiting for Splunk"
-        accent={
-          status
-            ? status.queue_depth === 0
-              ? "good"
-              : status.queue_depth < 1_000
-                ? "warn"
-                : "bad"
-            : "neutral"
-        }
+        accent={status ? (status.queue_depth === 0 ? "good" : status.queue_depth < 1_000 ? "warn" : "bad") : "neutral"}
       />
       <Tile
         label="Incidents Remembered"

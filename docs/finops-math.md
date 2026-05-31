@@ -1,8 +1,5 @@
 # Aegis — FinOps math, worked example
 
-> A judge or skeptical reviewer should be able to verify these numbers in
-> ten minutes with a calculator and the public Splunk pricing page.
-
 ## Enterprise persona (who pays for this)
 
 | Field | Value |

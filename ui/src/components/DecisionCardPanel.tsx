@@ -18,36 +18,35 @@ function formatAgo(unixSecs: number): string {
   return `${Math.floor(delta / 86400)} d ago`;
 }
 
-const EYEBROW = "text-[11px] font-medium uppercase tracking-wider text-neutral-400";
-
 function Match({ match }: { match: IncidentMatch }) {
   const sim = Math.round(match.similarity * 100);
   const ago = formatAgo(match.past_ts);
   return (
-    <div className="rounded-xl border border-neutral-200 bg-neutral-50/80 p-3.5">
+    <div className="module-card">
       <div className="flex items-center justify-between text-xs">
-        <div className="font-mono font-semibold text-emerald-700">{sim}% similar</div>
-        <div className="text-neutral-400">{ago}</div>
+        <div className="font-mono font-bold text-[#22C45A]">{sim}% similar</div>
+        <div className="text-[#6A6245]">{ago}</div>
       </div>
-      <div className="mt-1.5 text-xs text-neutral-500">
-        root cause: <span className="font-medium text-neutral-800">{match.past_root_cause_service}</span>
+      <div className="mt-1.5 text-xs text-[#6A6245]">
+        root cause:{" "}
+        <span className="font-bold text-[#3D3520]">{match.past_root_cause_service}</span>
         {match.past_resolved_in_minutes != null && (
           <> · fixed in {match.past_resolved_in_minutes} min</>
         )}
       </div>
       {match.past_cause ? (
-        <div className="mt-2 text-xs text-neutral-700">
-          <span className="text-neutral-400">cause:</span> {match.past_cause}
+        <div className="mt-2 text-xs text-[#3D3520]">
+          <span className="text-[#6A6245]">cause:</span> {match.past_cause}
         </div>
       ) : (
-        <div className="mt-2 text-xs italic text-neutral-400">
+        <div className="mt-2 text-xs italic text-[#6A6245]">
           No resolution recorded — fix this one and write it down so the next
           on-call has a head start.
         </div>
       )}
       {match.past_fix && (
-        <div className="mt-1 text-xs text-neutral-700">
-          <span className="text-neutral-400">fix:</span> {match.past_fix}
+        <div className="mt-1 text-xs text-[#3D3520]">
+          <span className="text-[#6A6245]">fix:</span> {match.past_fix}
         </div>
       )}
     </div>
@@ -55,16 +54,15 @@ function Match({ match }: { match: IncidentMatch }) {
 }
 
 function StateBadge({ state }: { state: DecisionCard["state"] }) {
-  const tone = {
-    green: "bg-emerald-50 text-emerald-700 ring-emerald-600/20",
-    orange: "bg-amber-50 text-amber-700 ring-amber-600/20",
-    red: "bg-rose-50 text-rose-700 ring-rose-600/20",
+  const config = {
+    green: { ledClass: "led led-green", label: "GREEN", badgeClass: "badge badge-green" },
+    orange: { ledClass: "led led-amber", label: "ORANGE", badgeClass: "badge badge-amber" },
+    red: { ledClass: "led led-red", label: "RED", badgeClass: "badge badge-red" },
   }[state];
   return (
-    <span
-      className={`inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-widest ring-1 ${tone}`}
-    >
-      {state}
+    <span className={config.badgeClass}>
+      <span className={config.ledClass} />
+      {config.label}
     </span>
   );
 }
@@ -82,10 +80,17 @@ export function DecisionCardPanel({
 
   if (!reachable) {
     return (
-      <section className="px-6 pb-6">
-        <div className="rounded-2xl border border-rose-200 bg-rose-50 p-6 text-sm text-rose-700 shadow-soft">
-          Gateway unreachable. Make sure <span className="font-mono">aegis-daemon</span>{" "}
-          is running on <span className="font-mono">127.0.0.1:7321</span>.
+      <section className="px-4 pb-4 pt-4">
+        <div className="console-card" style={{ borderColor: "rgba(212,48,32,0.3)" }}>
+          <div className="lcd-panel flex items-center gap-3">
+            <span className="led led-red" />
+            <span className="text-sm" style={{ color: "#D43020" }}>
+              Gateway unreachable. Make sure{" "}
+              <span className="font-mono text-[#E87C14]">aegis-daemon</span>{" "}
+              is running on{" "}
+              <span className="font-mono text-[#E87C14]">127.0.0.1:7321</span>.
+            </span>
+          </div>
         </div>
       </section>
     );
@@ -93,69 +98,102 @@ export function DecisionCardPanel({
 
   if (!card || card.state === "green") {
     return (
-      <section className="px-6 pb-6">
-        <div className="rounded-2xl bg-white p-6 shadow-card ring-1 ring-emerald-600/15">
-          <div className="flex items-center gap-3">
+      <section className="px-4 pb-4 pt-4">
+        <div className="console-card">
+          <div className="mb-3 flex items-center gap-3">
             <StateBadge state="green" />
-            <div className="text-base font-semibold text-neutral-900">All quiet</div>
+            <span className="eyebrow">System Status</span>
           </div>
-          <p className="mt-2 text-sm text-neutral-600">
-            {card?.headline ??
-              "No causal chains, no silent services, dedup is working. Aegis is watching for first-fire patterns."}
-          </p>
+          <div className="lcd-panel">
+            <div className="flex items-center gap-2">
+              <span className="led led-green" />
+              <span className="text-sm font-bold text-[#44C464]">SYS.RDY</span>
+              <span className="ml-auto font-mono text-[10px] text-[#6A6245]">v0.2.0</span>
+            </div>
+            <p className="mt-3 text-sm leading-relaxed text-[rgba(255,250,218,0.7)]">
+              {card?.headline ??
+                "No causal chains, no silent services, dedup is working. Aegis is watching for first-fire patterns."}
+            </p>
+          </div>
         </div>
       </section>
     );
   }
 
-  // Orange or red — show the full card.
   const isRed = card.state === "red";
   return (
-    <section className="px-6 pb-6">
+    <section className="px-4 pb-4 pt-4">
       <div
-        className={
+        className="console-card"
+        style={
           isRed
-            ? "rounded-2xl bg-white p-6 shadow-hero ring-1 ring-rose-500/30"
-            : "rounded-2xl bg-white p-6 shadow-hero-amber ring-1 ring-amber-500/30"
+            ? { borderColor: "rgba(212,48,32,0.3)" }
+            : { borderColor: "rgba(212,192,32,0.3)" }
         }
       >
-        <div className="flex items-center justify-between">
+        {/* Header */}
+        <div className="mb-4 flex items-center justify-between">
           <div className="flex items-center gap-3">
             <StateBadge state={card.state} />
-            <div className={EYEBROW}>Decision card</div>
+            <span className="eyebrow">Decision Card</span>
           </div>
           <button
             type="button"
             onClick={() => setShowRaw((v) => !v)}
-            className="font-mono text-[11px] text-neutral-400 transition hover:text-neutral-700"
+            className="font-mono text-[10px] text-[#6A6245] transition hover:text-[#3D3520]"
           >
-            {showRaw ? "hide raw" : "show raw"}
+            {showRaw ? "HIDE RAW" : "SHOW RAW"}
           </button>
         </div>
 
-        <h2 className="mt-3 text-2xl font-semibold tracking-tight text-neutral-900">
-          {card.root_cause_service ?? "Active incident"}
-        </h2>
-        <p className="mt-2 text-[15px] leading-relaxed text-neutral-700">{card.headline}</p>
-
-        {card.business_impact && (
-          <p className="mt-3 rounded-lg bg-neutral-50 px-3.5 py-2.5 text-xs text-neutral-600 ring-1 ring-neutral-200/70">
-            <span className="text-neutral-400">why this matters: </span>
-            {card.business_impact}
+        {/* Main LCD display — this stays dark */}
+        <div
+          className="lcd-panel"
+          style={
+            isRed
+              ? { boxShadow: "rgba(220,48,48,0.25) 0px 0px 20px 0px inset, rgba(0,0,0,0.55) 0px 4px 12px 0px inset" }
+              : { boxShadow: "rgba(212,192,32,0.15) 0px 0px 20px 0px inset, rgba(0,0,0,0.55) 0px 4px 12px 0px inset" }
+          }
+        >
+          <div className="flex items-center gap-2">
+            <span
+              className="text-[10px] font-bold uppercase tracking-[1.4px]"
+              style={{ color: isRed ? "#D43020" : "#D4C020" }}
+            >
+              {isRed ? "ALERT" : "WARNING"}
+            </span>
+            <span className={isRed ? "led led-red" : "led led-amber"} />
+          </div>
+          <h2 className="mt-2 text-2xl font-black uppercase tracking-[3px] text-[#E87C14]">
+            {card.root_cause_service ?? "Active incident"}
+          </h2>
+          <p className="mt-3 text-sm leading-relaxed text-[rgba(255,250,218,0.8)]">
+            {card.headline}
           </p>
-        )}
 
-        <div className="mt-5">
-          <div className={EYEBROW}>Suggested next step</div>
-          <p className="mt-1.5 text-sm leading-relaxed text-neutral-700">
-            {card.suggested_next_step}
-          </p>
+          {card.business_impact && (
+            <div className="mt-4 rounded px-3 py-2 text-xs text-[rgba(255,250,218,0.6)]"
+              style={{ backgroundColor: "rgba(0,0,0,0.3)", border: "1px solid rgba(255,250,218,0.1)" }}
+            >
+              <span className="text-[rgba(255,250,218,0.35)]">why this matters: </span>
+              {card.business_impact}
+            </div>
+          )}
         </div>
 
+        {/* Suggested next step — light section */}
+        <div className="mt-4">
+          <div className="eyebrow">Suggested Next Step</div>
+          <div className="module-card mt-2 text-sm leading-relaxed text-[#3D3520]">
+            {card.suggested_next_step}
+          </div>
+        </div>
+
+        {/* Similar past incidents */}
         {card.similar_incidents.length > 0 && (
-          <div className="mt-5">
-            <div className={EYEBROW}>Similar past incidents</div>
-            <div className="mt-2 grid gap-2.5 md:grid-cols-2">
+          <div className="mt-4">
+            <div className="eyebrow">Similar Past Incidents</div>
+            <div className="mt-2 grid gap-3 md:grid-cols-2">
               {card.similar_incidents.slice(0, 4).map((m) => (
                 <Match key={m.incident_id} match={m} />
               ))}
@@ -163,35 +201,31 @@ export function DecisionCardPanel({
           </div>
         )}
 
-        <div className="mt-6 flex flex-wrap gap-2.5">
+        {/* Action buttons — all visible now */}
+        <div className="mt-6 flex flex-wrap gap-3">
           <button
             type="button"
             disabled={busy}
             onClick={onAcknowledge}
-            className="rounded-xl bg-[#0071e3] px-4 py-2 text-sm font-semibold text-white shadow-soft transition hover:bg-[#0058b9] disabled:cursor-not-allowed disabled:bg-neutral-300"
+            className="btn-primary"
           >
             I'm on it
           </button>
-          <button
-            type="button"
-            onClick={onShowMore}
-            className="rounded-xl bg-white px-4 py-2 text-sm font-medium text-neutral-700 ring-1 ring-neutral-300 transition hover:bg-neutral-50"
-          >
-            Show me more past incidents
+          <button type="button" onClick={onShowMore} className="btn-secondary">
+            Show me more
           </button>
-          <button
-            type="button"
-            onClick={onDifferent}
-            className="rounded-xl bg-white px-4 py-2 text-sm font-medium text-neutral-700 ring-1 ring-neutral-300 transition hover:bg-neutral-50"
-          >
-            This looks different
+          <button type="button" onClick={onDifferent} className="btn-secondary">
+            Looks different
           </button>
         </div>
 
+        {/* Raw JSON */}
         {showRaw && (
-          <pre className="mt-5 overflow-x-auto rounded-xl bg-[#1d1d1f] p-4 font-mono text-[11px] leading-relaxed text-neutral-300">
-            {JSON.stringify(card, null, 2)}
-          </pre>
+          <div className="lcd-panel mt-4">
+            <pre className="overflow-x-auto font-mono text-[10px] leading-relaxed text-[rgba(255,250,218,0.6)]">
+              {JSON.stringify(card, null, 2)}
+            </pre>
+          </div>
         )}
       </div>
     </section>

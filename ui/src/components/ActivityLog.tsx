@@ -21,39 +21,40 @@ function formatTime(ts: number) {
 
 export function ActivityLog({ entries }: Props) {
   return (
-    <section className="px-6 pb-6">
-      <div className="rounded-2xl bg-white p-5 shadow-card ring-1 ring-neutral-200/60">
+    <section className="px-4 pb-4">
+      <div className="console-card">
         <div className="flex items-center justify-between">
-          <div className="text-[11px] font-medium uppercase tracking-wider text-neutral-400">
-            Activity
-          </div>
-          <div className="font-mono text-[11px] text-neutral-400">
+          <div className="eyebrow">Activity</div>
+          <div className="font-mono text-[10px] text-[#6A6245]">
             {entries.length} event{entries.length === 1 ? "" : "s"}
           </div>
         </div>
-        <div className="mt-3 max-h-72 overflow-y-auto font-mono text-xs leading-6 text-neutral-600">
+        <div className="lcd-panel mt-3 max-h-72 overflow-y-auto font-mono text-xs leading-6">
           {entries.length === 0 && (
-            <div className="text-neutral-400">
+            <div className="text-[rgba(255,250,218,0.35)]">
               Waiting for activity — status polls every 2 seconds.
             </div>
           )}
           {entries.map((e) => (
             <div key={e.id} className="flex items-center gap-3 py-0.5">
-              <span className="text-neutral-400">{formatTime(e.ts)}</span>
+              <span className="text-[rgba(255,250,218,0.3)]">{formatTime(e.ts)}</span>
               <span
-                className={
-                  e.direction === "out"
-                    ? "text-[#0071e3]"
-                    : e.ok
-                      ? "text-neutral-400"
-                      : "text-rose-500"
-                }
+                style={{
+                  color:
+                    e.direction === "out"
+                      ? "#E87C14"
+                      : e.ok
+                        ? "#44C464"
+                        : "#D43020",
+                }}
               >
                 {e.direction === "out" ? "→" : "←"}
               </span>
-              <span className="text-neutral-800">{e.label}</span>
-              <span className="truncate text-neutral-400">{e.detail}</span>
-              <span className="ml-auto text-neutral-300">{e.latency_ms.toFixed(0)}ms</span>
+              <span className="text-[#FFFADA]">{e.label}</span>
+              <span className="truncate text-[rgba(255,250,218,0.4)]">{e.detail}</span>
+              <span className="ml-auto text-[rgba(255,250,218,0.2)]">
+                {e.latency_ms.toFixed(0)}ms
+              </span>
             </div>
           ))}
         </div>

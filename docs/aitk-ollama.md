@@ -8,8 +8,8 @@ The Splunk AI Toolkit (AITK) v5.6+ introduced **LLM Connectors** in its
 Connection Management UI. These connectors let SPL `| ai` route to any
 of the LLM providers AITK supports — including **local Ollama**.
 
-That gives us a path to demonstrate "Best Use of Splunk Hosted Models"
-*without* needing SLIM API access on a 14-day Splunk Cloud trial:
+That gives us a working `| ai` integration without needing SLIM API
+access on a 14-day Splunk Cloud trial:
 
 ```
 SPL search  →  | ai prompt=... provider=ollama_local model=gpt-oss:20b

@@ -1,14 +1,63 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;700;900&display=swap');
 @import "tailwindcss";
 
-@theme {
-  --font-sans: -apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text",
-    "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-  --font-mono: "SF Mono", "JetBrains Mono", ui-monospace, Menlo, Consolas, monospace;
+/* ═══════════════════════════════════════════════════════════════════════
+   AEGIS — SKEUOMORPHIC DESIGN SYSTEM
+   Inspired by skeumorphism.vercel.app / Studio Console SC-48
+   Light warm beige body, dark LCD panels only.
+   ═══════════════════════════════════════════════════════════════════════ */
 
-  --shadow-soft: 0 1px 2px rgba(0, 0, 0, 0.04), 0 1px 3px rgba(0, 0, 0, 0.06);
-  --shadow-card: 0 4px 16px -4px rgba(20, 30, 60, 0.1), 0 1px 3px rgba(0, 0, 0, 0.05);
-  --shadow-hero: 0 24px 60px -28px rgba(215, 38, 61, 0.35);
-  --shadow-hero-amber: 0 24px 60px -30px rgba(183, 121, 31, 0.3);
+@theme {
+  /* ── Fonts ── */
+  --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  --font-mono: 'SF Mono', 'JetBrains Mono', ui-monospace, Menlo, Consolas, monospace;
+
+  /* ── Color palette ── */
+  --color-page: #ddd5c4;
+  --color-panel: #cac2a8;
+  --color-panel-light: #d6ceB6;
+  --color-panel-dark: #b8b098;
+  --color-header: #bab298;
+  --color-amber: #E87C14;
+  --color-cream: #FFFADA;
+  --color-charcoal: #1A1A0E;
+  --color-near-black: #0A0A06;
+  --color-ink: #3D3520;
+  --color-ink-light: #6A6245;
+  --color-ink-muted: rgba(61,53,32,0.55);
+  --color-gold: #D4C020;
+  --color-amber-secondary: #F5A840;
+  --color-green: #22C45A;
+  --color-neon-green: #44C464;
+  --color-red: #D43020;
+  --color-border: rgba(61,53,32,0.15);
+  --color-border-strong: rgba(61,53,32,0.25);
+
+  /* ── Shadows (elevation levels) ── */
+  --shadow-raised: rgba(255,255,255,0.7) 0px 2px 4px 0px inset,
+                   rgba(0,0,0,0.15) 0px -2px 4px 0px inset,
+                   rgba(0,0,0,0.2) 0px 4px 10px 0px,
+                   rgba(0,0,0,0.1) 0px 1px 3px 0px,
+                   rgba(61,53,32,0.25) 0px 0px 0px 1px;
+
+  --shadow-elevated: rgba(255,255,255,0.6) 0px 2px 4px 0px inset,
+                     rgba(0,0,0,0.1) 0px -2px 4px 0px inset,
+                     rgba(0,0,0,0.15) 0px 3px 8px 0px,
+                     rgba(61,53,32,0.2) 0px 0px 0px 1px;
+
+  --shadow-floating: rgba(255,255,255,0.65) 0px 2px 5px 0px inset,
+                     rgba(0,0,0,0.12) 0px -3px 8px 0px inset,
+                     rgba(61,53,32,0.2) 0px 12px 40px 0px,
+                     rgba(0,0,0,0.15) 0px 3px 10px 0px,
+                     rgba(61,53,32,0.2) 0px 0px 0px 1px;
+
+  --shadow-inset-lcd: rgba(0,0,0,0.55) 0px 4px 12px 0px inset,
+                      rgba(0,0,0,0.2) 0px 1px 3px 0px inset;
+
+  --shadow-amber-glow: rgba(232,124,20,0.55) 0px 0px 4px 0px;
+  --shadow-green-glow: rgba(34,196,90,0.9) 0px 0px 6px 0px,
+                       rgba(34,196,90,0.5) 0px 0px 14px 0px;
+  --shadow-red-glow: rgba(220,48,48,0.8) 0px 0px 8px 0px;
 }
 
 html,
@@ -19,27 +68,206 @@ body,
 
 body {
   font-family: var(--font-sans);
-  color: #1d1d1f;
-  background:
-    radial-gradient(1100px 560px at 12% -10%, rgba(0, 113, 227, 0.07), transparent 60%),
-    radial-gradient(950px 520px at 100% 0%, rgba(94, 92, 230, 0.06), transparent 55%),
-    #f5f5f7;
+  color: var(--color-ink);
+  background-color: var(--color-page);
+  background-image:
+    repeating-linear-gradient(
+      0deg,
+      transparent,
+      transparent 2px,
+      rgba(0,0,0,0.012) 2px,
+      rgba(0,0,0,0.012) 4px
+    );
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
 }
 
-/* Quiet, native-feeling scrollbars inside panels */
-*::-webkit-scrollbar {
-  width: 10px;
-  height: 10px;
-}
+/* ── Scrollbars ── */
+*::-webkit-scrollbar { width: 10px; height: 10px; }
+*::-webkit-scrollbar-track { background: rgba(106, 98, 69, 0.08); }
 *::-webkit-scrollbar-thumb {
-  background: rgba(0, 0, 0, 0.16);
-  border-radius: 999px;
-  border: 2px solid transparent;
-  background-clip: content-box;
+  background: rgba(80, 68, 40, 0.25);
+  border-radius: 999px; border: 2px solid transparent; background-clip: content-box;
 }
-*::-webkit-scrollbar-thumb:hover {
-  background: rgba(0, 0, 0, 0.28);
-  background-clip: content-box;
+*::-webkit-scrollbar-thumb:hover { background: rgba(80,68,40,0.4); background-clip: content-box; }
+
+/* ═══════════════════════════════════════════════════
+   COMPONENT CLASSES
+   ═══════════════════════════════════════════════════ */
+
+/* Console card — main light beige container */
+.console-card {
+  background-color: var(--color-panel);
+  border-radius: 12px;
+  border: 1px solid var(--color-border);
+  box-shadow: var(--shadow-floating);
+  padding: 24px;
+}
+
+/* LCD display panel — ONLY dark element */
+.lcd-panel {
+  background-color: var(--color-charcoal);
+  border-radius: 6px;
+  border: 1px solid var(--color-near-black);
+  box-shadow: var(--shadow-inset-lcd);
+  padding: 16px;
+  color: var(--color-amber);
+}
+
+/* Module card — slightly darker beige nested container */
+.module-card {
+  background-color: var(--color-panel-dark);
+  border-radius: 8px;
+  border: 1px solid var(--color-border);
+  box-shadow: rgba(255,255,255,0.5) 0px 1px 2px 0px inset,
+              rgba(0,0,0,0.08) 0px 2px 6px 0px;
+  padding: 16px;
+}
+
+/* ── Buttons ── */
+
+.btn-primary {
+  background-color: var(--color-amber);
+  color: #fff;
+  font-size: 10px;
+  font-weight: 900;
+  font-family: var(--font-sans);
+  letter-spacing: 1.4px;
+  text-transform: uppercase;
+  padding: 10px 24px;
+  border-radius: 6px;
+  border: none;
+  box-shadow: rgba(255,255,255,0.4) 0px 1px 2px 0px inset,
+              rgba(0,0,0,0.3) 0px 3px 8px 0px,
+              rgba(0,0,0,0.15) 0px 1px 3px 0px;
+  cursor: pointer;
+  transition: all 200ms ease;
+  min-height: 40px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.btn-primary:hover:not(:disabled) {
+  filter: brightness(1.08);
+  box-shadow: rgba(255,255,255,0.5) 0px 1px 2px 0px inset,
+              rgba(0,0,0,0.35) 0px 4px 10px 0px;
+}
+.btn-primary:active:not(:disabled) { transform: scale(0.97); }
+.btn-primary:disabled { opacity: 0.5; cursor: not-allowed; }
+
+.btn-secondary {
+  background-color: var(--color-panel-dark);
+  color: var(--color-ink);
+  font-size: 10px;
+  font-weight: 900;
+  font-family: var(--font-sans);
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  padding: 10px 24px;
+  border-radius: 6px;
+  border: 1px solid var(--color-border-strong);
+  box-shadow: rgba(255,255,255,0.5) 0px 1px 2px 0px inset,
+              rgba(0,0,0,0.1) 0px 2px 6px 0px;
+  cursor: pointer;
+  transition: all 200ms ease;
+  min-height: 40px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.btn-secondary:hover:not(:disabled) {
+  background-color: var(--color-panel);
+  box-shadow: rgba(255,255,255,0.6) 0px 1px 3px 0px inset,
+              rgba(0,0,0,0.15) 0px 3px 8px 0px;
+}
+.btn-secondary:active:not(:disabled) { transform: scale(0.97); }
+.btn-secondary:disabled { opacity: 0.5; cursor: not-allowed; }
+
+.btn-tertiary {
+  background-color: var(--color-panel-light);
+  color: var(--color-ink-light);
+  font-size: 9px;
+  font-weight: 700;
+  font-family: var(--font-sans);
+  letter-spacing: 0.8px;
+  text-transform: uppercase;
+  padding: 8px 16px;
+  border-radius: 6px;
+  border: 1px solid var(--color-border);
+  box-shadow: rgba(255,255,255,0.5) 0px 1px 2px 0px inset,
+              rgba(0,0,0,0.08) 0px 2px 4px 0px;
+  cursor: pointer;
+  transition: all 200ms ease;
+  min-height: 29px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.btn-tertiary:hover:not(:disabled) {
+  background-color: var(--color-panel);
+  color: var(--color-ink);
+}
+.btn-tertiary:active:not(:disabled) { transform: scale(0.97); }
+.btn-tertiary:disabled { opacity: 0.4; cursor: not-allowed; }
+
+/* Recessed input — dark LCD-style text field */
+.input-recessed {
+  background-color: var(--color-near-black);
+  border-radius: 4px;
+  border: 1px solid rgba(0,0,0,0.3);
+  box-shadow: var(--shadow-inset-lcd);
+  padding: 10px 12px;
+  color: var(--color-amber);
+  font-size: 14px;
+  line-height: 20px;
+  font-family: var(--font-mono);
+  outline: none;
+  width: 100%;
+  transition: border-color 200ms ease, box-shadow 200ms ease;
+}
+.input-recessed::placeholder { color: rgba(232,124,20,0.4); }
+.input-recessed:focus {
+  border-color: var(--color-amber);
+  box-shadow: rgba(232,124,20,0.2) 0px 0px 0px 3px, var(--shadow-inset-lcd);
+}
+
+/* LED indicator dots */
+.led { width: 8px; height: 8px; border-radius: 50%; display: inline-block; flex-shrink: 0; }
+.led-green { background-color: var(--color-green); box-shadow: var(--shadow-green-glow); }
+.led-amber {
+  background-color: var(--color-amber);
+  box-shadow: var(--shadow-amber-glow);
+  animation: pulse-amber 2s ease-in-out infinite;
+}
+.led-red {
+  background-color: var(--color-red);
+  box-shadow: var(--shadow-red-glow);
+  animation: pulse-red 1.5s ease-in-out infinite;
+}
+.led-off { background-color: rgba(80, 68, 40, 0.3); }
+
+@keyframes pulse-amber {
+  0%, 100% { box-shadow: rgba(232,124,20,0.55) 0px 0px 4px 0px; }
+  50% { box-shadow: rgba(232,124,20,0.9) 0px 0px 10px 2px; }
+}
+@keyframes pulse-red {
+  0%, 100% { box-shadow: rgba(220,48,48,0.6) 0px 0px 6px 0px; }
+  50% { box-shadow: rgba(220,48,48,1) 0px 0px 12px 3px; }
+}
+
+/* Status badge pills */
+.badge {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 4px 12px; border-radius: 20px;
+  font-size: 10px; font-weight: 900; letter-spacing: 1.4px; text-transform: uppercase;
+}
+.badge-green { background-color: var(--color-green); color: #fff; }
+.badge-amber { background-color: var(--color-gold); color: var(--color-charcoal); }
+.badge-red { background-color: var(--color-red); color: #fff; }
+.badge-muted { background-color: var(--color-panel-dark); color: var(--color-ink); }
+
+/* Eyebrow label — dark text on light bg */
+.eyebrow {
+  font-size: 11px; font-weight: 900; letter-spacing: 1.4px;
+  text-transform: uppercase; color: var(--color-ink-light);
 }

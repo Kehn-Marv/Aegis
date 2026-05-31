@@ -90,8 +90,8 @@ INFO SplunkAITransport initialised: provider=ollama_local model=gpt-oss:20b
 ```
 
 …and every reasoning call now flows through Splunk's `| ai` command.
-**For prize-fit purposes, this is a genuine integration with the AI
-Toolkit and the SPL `| ai` surface that judges will see in the demo.**
+This is a genuine integration with the AI Toolkit and the SPL `| ai`
+surface.
 
 ## Plan B — raw Ollama (LIVE, default)
 
@@ -171,11 +171,6 @@ What doesn't:
 * SAIA replying in natural language about Aegis audit events.
 
 ## What this means for the submission
-
-The hackathon's Hosted Models prize text says:
-
-> Build solutions that use Splunk Hosted Models such as gpt-oss-20b,
-> gpt-oss-120b, or Foundation-Sec-1.1-8B-Instruct.
 
 Aegis ships **a working, tested integration with the `| ai` SPL
 transport** (`SplunkAITransport`, `sidecar/splunk_ai.py`) **and**

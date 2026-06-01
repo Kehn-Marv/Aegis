@@ -240,6 +240,10 @@ body {
   0%, 100% { box-shadow: 0 0 6px rgba(200,48,32,0.6); }
   50% { box-shadow: 0 0 12px 3px rgba(200,48,32,0.9); }
 }
+@keyframes pulse-green {
+  0%, 100% { box-shadow: 0 0 4px rgba(34,160,80,0.5); }
+  50% { box-shadow: 0 0 10px 2px rgba(34,160,80,0.85); }
+}
 
 /* Badges */
 .badge {

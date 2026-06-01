@@ -27,6 +27,8 @@ export default function App() {
   const [busy, setBusy] = useState(false);
   const [showIncidents, setShowIncidents] = useState(false);
   const [incidentFocus, setIncidentFocus] = useState<IncidentFocus | null>(null);
+  /** Track the last seen decision card ID so we can reset focus on a new card */
+  const lastDecisionIdRef = useRef<string | null>(null);
   const idRef = useRef(0);
 
   const append = useCallback((entry: Omit<LogEntry, "id" | "ts">) => {
@@ -82,6 +84,17 @@ export default function App() {
       clearInterval(handle);
     };
   }, []);
+
+  // When a genuinely NEW active card arrives, reset the "Show me more" filter.
+  // We only act on a real incoming card (non-null, non-green) — when the backend
+  // clears decision to null we stay put, same rule as the pinned-card logic.
+  const cardId = status?.decision?.decision_id ?? null;
+  const cardState = status?.decision?.state ?? null;
+  useEffect(() => {
+    if (cardId && cardState !== "green" && cardId !== lastDecisionIdRef.current) {
+      setIncidentFocus(null);
+    }
+  }, [cardId, cardState]);
 
   const send = useCallback(
     async (command: string, seconds?: number) => {
@@ -190,6 +203,8 @@ export default function App() {
           onAcknowledge={handleAcknowledge}
           onShowMore={() => {
             const d = status?.decision;
+            // Track this card so a new card resets the filter
+            lastDecisionIdRef.current = d?.decision_id ?? null;
             setShowIncidents(true);
             setIncidentFocus({
               rootCauseService: d?.root_cause_service ?? null,
@@ -213,6 +228,10 @@ export default function App() {
               latency_ms: 0,
             })
           }
+          onActionTaken={() => {
+            // Reset incident memory filter so it reverts to normal view
+            setIncidentFocus(null);
+          }}
           busy={busy}
         />
       </div>

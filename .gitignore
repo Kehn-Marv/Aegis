@@ -42,6 +42,7 @@ agent/configs/aegis-ops.toml
 .idea/
 .DS_Store
 Thumbs.db
+.agents/
 
 # Logs / runtime data
 *.log

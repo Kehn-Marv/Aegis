@@ -8,13 +8,6 @@ interface Props {
   diagnosticActive: boolean;
 }
 
-/**
- * Compact, secondary control panel.
- *
- * The decision card is the hero on the page; these are the bounded-window
- * tools an engineer reaches for *after* deciding to act. None of them mutate
- * production — they only change what Aegis reports to Splunk.
- */
 export function ToolsPanel({
   onSend,
   busy,
@@ -26,23 +19,27 @@ export function ToolsPanel({
   const [diagSecs, setDiagSecs] = useState(60);
 
   return (
-    <section className="px-4 pb-4">
+    <section>
       <details className="console-card">
-        <summary className="cursor-pointer text-[10px] font-black uppercase tracking-[1.4px] text-[#6A6245] transition hover:text-[#3D3520]">
-          Advanced Tools (bounded-window, never mutate production)
+        <summary className="flex cursor-pointer items-center justify-between text-[10px] font-bold uppercase tracking-[1.4px] text-[#8a8470] transition hover:text-[#2e2a1e]">
+          <span>Advanced Tools</span>
+          <span className="disclosure-arrow" aria-hidden="true">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+              <polyline points="6 9 12 15 18 9" />
+            </svg>
+          </span>
         </summary>
-        <div className="mt-4 space-y-4 border-t border-[rgba(61,53,32,0.1)] pt-4 text-sm">
-          {/* Network status */}
+        <div className="mt-4 space-y-4 border-t border-[rgba(0,0,0,0.06)] pt-4 text-sm">
+          {/* Network */}
           <div className="flex flex-wrap items-center gap-3">
-            <span className="text-xs text-[#6A6245]">Network status:</span>
+            <span className="text-xs font-medium text-[#5a5440]">Network:</span>
             <button
               type="button"
               disabled={busy || online}
               onClick={() => onSend("online")}
               className="btn-tertiary"
-              style={online ? { borderColor: "rgba(34,196,90,0.4)", color: "#22C45A" } : {}}
+              style={online ? { borderColor: "rgba(34,160,80,0.25)" } : {}}
             >
-              {online && <span className="led led-green mr-1.5" style={{ width: 5, height: 5 }} />}
               Online
             </button>
             <button
@@ -50,72 +47,65 @@ export function ToolsPanel({
               disabled={busy || !online}
               onClick={() => onSend("offline")}
               className="btn-tertiary"
-              style={!online ? { borderColor: "rgba(212,192,32,0.4)", color: "#D4C020" } : {}}
+              style={!online ? { borderColor: "rgba(200,168,32,0.25)" } : {}}
             >
-              {!online && <span className="led led-amber mr-1.5" style={{ width: 5, height: 5 }} />}
               Offline
             </button>
           </div>
 
-          {/* Diagnostic tracing */}
+          {/* Diagnostic */}
           <div className="flex flex-wrap items-center gap-3">
-            <span className="text-xs text-[#6A6245]">Diagnostic tracing:</span>
+            <span className="text-xs font-medium text-[#5a5440]">Diagnostic:</span>
             <input
               type="number"
-              min={1}
-              max={3600}
+              min={1} max={3600}
               value={diagSecs}
               onChange={(e) => setDiagSecs(Number(e.target.value) || 60)}
-              className="input-recessed"
-              style={{ width: 80, padding: "6px 10px", fontSize: 12 }}
+              className="btn-tertiary text-center font-mono !text-[12px] !font-semibold !text-[#2e2a1e] !pr-5"
+              style={{ width: 76 }}
             />
-            <span className="text-[10px] text-[#b8b098]">seconds</span>
             <button
               type="button"
               disabled={busy}
               onClick={() => onSend("diagnostic", diagSecs)}
               className="btn-tertiary"
-              style={diagnosticActive ? { borderColor: "rgba(34,196,90,0.4)", color: "#22C45A" } : {}}
+              style={diagnosticActive ? { borderColor: "rgba(34,160,80,0.25)" } : {}}
             >
-              {diagnosticActive && <span className="led led-green mr-1.5" style={{ width: 5, height: 5 }} />}
               {diagnosticActive ? "Active" : "Enable"}
             </button>
           </div>
 
-          {/* Raw passthrough */}
+          {/* Override */}
           <div className="flex flex-wrap items-center gap-3">
-            <span className="text-xs text-[#6A6245]">Raw passthrough (bypass dedup):</span>
+            <span className="text-xs font-medium text-[#5a5440]">Raw passthrough:</span>
             <input
               type="number"
-              min={1}
-              max={3600}
+              min={1} max={3600}
               value={overrideSecs}
               onChange={(e) => setOverrideSecs(Number(e.target.value) || 30)}
-              className="input-recessed"
-              style={{ width: 80, padding: "6px 10px", fontSize: 12 }}
+              className="btn-tertiary text-center font-mono !text-[12px] !font-semibold !text-[#2e2a1e] !pr-5"
+              style={{ width: 76 }}
             />
-            <span className="text-[10px] text-[#b8b098]">seconds</span>
             <button
               type="button"
               disabled={busy}
               onClick={() => onSend("override", overrideSecs)}
               className="btn-tertiary"
-              style={overrideActive ? { borderColor: "rgba(232,124,20,0.4)", color: "#E87C14" } : {}}
+              style={overrideActive ? { borderColor: "rgba(224,120,24,0.25)" } : {}}
             >
-              {overrideActive && <span className="led led-amber mr-1.5" style={{ width: 5, height: 5 }} />}
               {overrideActive ? "Active" : "Enable"}
             </button>
           </div>
 
           {/* Reset */}
           <div className="flex flex-wrap items-center gap-3">
-            <span className="text-xs text-[#6A6245]">Reset:</span>
+            <span className="text-xs font-medium text-[#5a5440]">Reset:</span>
             <button
               type="button"
               disabled={busy}
               onClick={() => onSend("reset")}
               className="btn-tertiary"
-              style={{ color: "#D43020", borderColor: "rgba(212,48,32,0.3)" }}
+              style={{ color: "#c83020", borderColor: "rgba(200,48,32,0.2)" }}
             >
               Clear queue + counters
             </button>

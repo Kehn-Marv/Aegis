@@ -10,7 +10,7 @@ import {
 } from "./api";
 import { ActivityLog, type LogEntry } from "./components/ActivityLog";
 import { DecisionCardPanel } from "./components/DecisionCardPanel";
-import { IncidentMemoryPanel } from "./components/IncidentMemoryPanel";
+import { IncidentMemoryPanel, type IncidentFocus } from "./components/IncidentMemoryPanel";
 import { StatusBanner } from "./components/StatusBanner";
 import { StatusTiles } from "./components/StatusTiles";
 import { ToolsPanel } from "./components/ToolsPanel";
@@ -26,6 +26,7 @@ export default function App() {
   const [log, setLog] = useState<LogEntry[]>([]);
   const [busy, setBusy] = useState(false);
   const [showIncidents, setShowIncidents] = useState(false);
+  const [incidentFocus, setIncidentFocus] = useState<IncidentFocus | null>(null);
   const idRef = useRef(0);
 
   const append = useCallback((entry: Omit<LogEntry, "id" | "ts">) => {
@@ -177,41 +178,75 @@ export default function App() {
   );
 
   return (
-    <div className="mx-auto max-w-5xl pb-8">
-      <StatusBanner status={status} reachable={reachable} />
-      <DecisionCardPanel
-        status={status}
-        reachable={reachable}
-        onAcknowledge={handleAcknowledge}
-        onShowMore={() => setShowIncidents(true)}
-        onDifferent={() =>
-          append({
-            direction: "out",
-            label: "decision feedback",
-            detail: "operator marked the current card as 'looks different'",
-            ok: true,
-            latency_ms: 0,
-          })
-        }
-        busy={busy}
-      />
-      <StatusTiles status={status} />
-      {(showIncidents || incidents.length > 0) && (
-        <IncidentMemoryPanel
-          incidents={incidents}
-          onResolve={handleResolve}
+    <div className="mx-auto max-w-5xl flex flex-col gap-4 pb-4" style={{ paddingTop: 36 }}>
+      <div className="rise px-4" style={{ animationDelay: "0ms", marginBottom: 24 }}>
+        <StatusBanner status={status} reachable={reachable} />
+      </div>
+
+      <div id="decision" className="rise px-4 scroll-mt-4" style={{ animationDelay: "60ms" }}>
+        <DecisionCardPanel
+          status={status}
+          reachable={reachable}
+          onAcknowledge={handleAcknowledge}
+          onShowMore={() => {
+            const d = status?.decision;
+            setShowIncidents(true);
+            setIncidentFocus({
+              rootCauseService: d?.root_cause_service ?? null,
+              chainId: d?.chain_id ?? null,
+              similar: (d?.similar_incidents ?? []).map((m) => ({
+                id: m.incident_id,
+                similarity: m.similarity,
+              })),
+              nonce: Date.now(),
+            });
+            requestAnimationFrame(() =>
+              document.getElementById("memory")?.scrollIntoView({ behavior: "smooth" }),
+            );
+          }}
+          onDifferent={() =>
+            append({
+              direction: "out",
+              label: "decision feedback",
+              detail: "operator marked the current card as 'looks different'",
+              ok: true,
+              latency_ms: 0,
+            })
+          }
           busy={busy}
         />
+      </div>
+
+      <div className="rise px-4" style={{ animationDelay: "120ms" }}>
+        <StatusTiles status={status} />
+      </div>
+
+      {(showIncidents || incidents.length > 0) && (
+        <div id="memory" className="rise px-4 scroll-mt-4" style={{ animationDelay: "160ms" }}>
+          <IncidentMemoryPanel
+            incidents={incidents}
+            onResolve={handleResolve}
+            busy={busy}
+            focus={incidentFocus}
+          />
+        </div>
       )}
-      <ToolsPanel
-        onSend={send}
-        busy={busy}
-        online={status?.online ?? true}
-        overrideActive={status?.override_active ?? false}
-        diagnosticActive={status?.diagnostic_active ?? false}
-      />
-      <ActivityLog entries={log} />
-      <footer className="px-4 pb-4 pt-2 text-center">
+
+      <div id="tools" className="rise px-4 scroll-mt-4" style={{ animationDelay: "200ms" }}>
+        <ToolsPanel
+          onSend={send}
+          busy={busy}
+          online={status?.online ?? true}
+          overrideActive={status?.override_active ?? false}
+          diagnosticActive={status?.diagnostic_active ?? false}
+        />
+      </div>
+
+      <div className="rise px-4" style={{ animationDelay: "240ms" }}>
+        <ActivityLog entries={log} />
+      </div>
+
+      <footer className="px-4 pt-2 text-center">
         <div className="badge badge-muted inline-flex items-center gap-2 font-mono text-[9px] uppercase tracking-[1.4px]">
           Aegis · v0.2.0 · REST /api/status · MCP /mcp
         </div>

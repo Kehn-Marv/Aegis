@@ -16,10 +16,9 @@
     <div class="wrap">
       <div class="topbar">
         <div class="brand">
-          <div class="mark">&#9650;</div>
           <div>
             <h1>Aegis Workload</h1>
-            <p>Self-driving service fleet &middot; logs, metrics &amp; traces &rarr; OpenTelemetry &amp; the Aegis gateway</p>
+            <p>Self-driving service fleet</p>
           </div>
         </div>
         <div class="health" id="health">
@@ -31,7 +30,6 @@
       <div class="stats" id="stats"></div>
 
       <div class="banner" id="banner">
-        <span class="pill" id="banner-pill"></span>
         <div>
           <b id="banner-title"></b>
           <div class="sum" id="banner-sum"></div>
@@ -41,20 +39,12 @@
 
       <div class="grid">
         <div class="col">
-          <section class="card">
+          <section class="card card-fill">
             <header>
               <h2>Service Fleet</h2>
               <span class="meta" id="fleet-meta"></span>
             </header>
             <div class="body"><div class="fleet" id="fleet"></div></div>
-          </section>
-
-          <section class="card">
-            <header>
-              <h2>Live Activity</h2>
-              <span class="meta">auto-injected incidents &amp; recovery</span>
-            </header>
-            <div class="body"><div class="feed" id="feed"></div></div>
           </section>
         </div>
 
@@ -79,8 +69,16 @@
         </div>
       </div>
 
+      <section class="card card-wide">
+        <header>
+          <h2>Live Activity</h2>
+          <span class="meta">auto-injected incidents &amp; recovery</span>
+        </header>
+        <div class="body"><div class="feed" id="feed"></div></div>
+      </section>
+
       <div class="footer">
-        Aegis Workload &middot; <code>GET /api/state</code> &middot; OTLP &rarr; <code>OTEL_EXPORTER_OTLP_ENDPOINT</code> &middot; raw logs &rarr; <code>tcp/5140</code>
+        <span class="pill">Aegis Workload &middot; <code>GET /api/state</code> &middot; OTLP &rarr; <code>OTEL_EXPORTER_OTLP_ENDPOINT</code> &middot; Raw Logs &rarr; <code>TCP/5140</code></span>
       </div>
     </div>
 

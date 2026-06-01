@@ -13,56 +13,31 @@ const STATE_COPY: Record<HealthState, { label: string; ledClass: string }> = {
 
 const UNREACHABLE = { label: "Unreachable", ledClass: "led led-off" };
 
+
 export function StatusBanner({ status, reachable }: Props) {
   const visual = !reachable ? UNREACHABLE : STATE_COPY[status?.state ?? "green"];
 
   return (
-    <header className="console-card mx-4 mt-4 flex items-center justify-between !rounded-lg !py-3 !px-5">
-      {/* Brand */}
-      <div className="flex items-center gap-3">
-        <div className="btn-primary flex h-10 w-10 items-center justify-center !rounded-lg !p-0 text-lg">
-          ▲
-        </div>
-        <div className="leading-tight">
-          <div className="text-sm font-black uppercase tracking-[3px] text-[#3D3520]">
-            Aegis
-          </div>
-          <div className="mt-0.5 text-[10px] text-[#6A6245]">
-            Control Panel · v0.2.0
-          </div>
-        </div>
-      </div>
-
-      {/* Nav links */}
-      <nav className="hidden items-center gap-6 md:flex">
-        {["Dashboard", "Memory", "Tools"].map((item) => (
-          <span
-            key={item}
-            className="cursor-default text-[10px] font-bold uppercase tracking-[1.4px] text-[#6A6245] transition-colors hover:text-[#3D3520]"
-          >
-            {item}
-          </span>
-        ))}
-      </nav>
+    <header className="console-card flex items-center justify-between gap-4 !rounded-xl !py-4 !px-6">
+      {/* Brand — single clean wordmark, owns its space */}
+      <a
+        href="#top"
+        onClick={(e) => {
+          e.preventDefault();
+          window.scrollTo({ top: 0, behavior: "smooth" });
+        }}
+        className="group flex items-center no-underline"
+      >
+        <span className="text-[24px] font-black uppercase leading-none tracking-[7px] text-[#2e2a1e] transition-[letter-spacing] duration-300 group-hover:tracking-[8px]">
+          Aegis
+        </span>
+      </a>
 
       {/* Status */}
-      <div className="flex items-center gap-4">
-        {status && (
-          <div className="hidden text-right md:block">
-            <div className="text-[9px] font-bold uppercase tracking-[1.4px] text-[#6A6245]">
-              Memory
-            </div>
-            <div className="font-mono text-[11px] text-[#3D3520]">
-              {status.incidents_remembered} incident
-              {status.incidents_remembered === 1 ? "" : "s"}
-            </div>
-          </div>
-        )}
+      <div className="flex items-center gap-3">
         <div className="badge badge-muted flex items-center gap-2">
           <span className={visual.ledClass} />
-          <span className="text-[10px] font-black uppercase tracking-[1px]">
-            {visual.label}
-          </span>
+          <span>{visual.label}</span>
         </div>
       </div>
     </header>

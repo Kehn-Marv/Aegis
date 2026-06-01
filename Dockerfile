@@ -1,4 +1,4 @@
-# syntax=docker/dockerfile:1
+#
 #
 # Single-container build for the whole Aegis project:
 #   - Rust gateway  (aegis-daemon)        → ingest 5140, REST/MCP/UI on 7321

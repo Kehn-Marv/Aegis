@@ -1,4 +1,4 @@
-﻿# Aegis Control Panel UI
+# Aegis Control Panel UI
 
 A single-page React + TypeScript app built around the **decision card**.
 When state is green the page is quiet. When orange or red, the card
@@ -7,6 +7,16 @@ three buttons (`I'm on it`, `Show me more past incidents`, `This looks
 different`).
 
 ## Run
+
+**Easiest way:** use Docker from the repo root. The container builds the
+UI and serves it automatically:
+
+```powershell
+docker compose up --build
+# Control panel → http://localhost:7321
+```
+
+**From source (for UI development):**
 
 The Aegis daemon needs to be running first:
 
@@ -19,7 +29,7 @@ Then in a separate terminal:
 
 ```powershell
 cd ui
-npm install            # first time only  -  about a minute
+npm install            # first time only, about a minute
 npm run dev            # http://localhost:5173
 ```
 
@@ -51,12 +61,15 @@ CORS.
 
 ## Build
 
+Docker handles this automatically. If you need a manual production
+build:
+
 ```powershell
 npm run build
 ```
 
-Outputs to `dist/`. Serve it behind any static file server pointed at
-the daemon. For the demo, `npm run dev` is sufficient.
+Outputs to `dist/`. The daemon serves it at http://localhost:7321.
+For development, `npm run dev` is sufficient.
 
 ## API surface used
 

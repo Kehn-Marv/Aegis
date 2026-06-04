@@ -147,14 +147,15 @@ python demo\log_spammer.py --target tcp://127.0.0.1:5140 --pattern cascade
 
 Other manual patterns: `crashloop`, `routine`, `silence`.
 
-**Build the UI** (first time only):
+**See the UI:** If you used Docker (Option 1), the control panel is
+already live at http://localhost:7321. If you built from source, run:
 
 ```powershell
 cd ui
 npm install && npm run build    # daemon serves the UI at http://localhost:7321
 ```
 
-For hot-reload during development: `npm run dev` → http://localhost:5173
+For UI development with hot-reload: `npm run dev` → http://localhost:5173
 
 **Try the memory loop:**
 

@@ -1,4 +1,4 @@
-# Causal chain detection
+﻿# Causal chain detection
 
 When several services start failing in the same window, Aegis attributes
 the root cause to **whichever service broke earliest**. Everything that
@@ -7,7 +7,7 @@ broke after it is collateral damage.
 ## The signal
 
 The dedup stage already emits one `FirstOccurrence` event the first time
-a new signature is seen — that's the moment of "this is new". The causal
+a new signature is seen  -  that's the moment of "this is new". The causal
 engine watches every **anomalous** `FirstOccurrence` (errors, warnings, and
 stack-trace continuations), tags it with the service that produced it, and
 keeps a small ring buffer per service. Routine `INFO`/`DEBUG` first-sightings
@@ -95,16 +95,16 @@ during long incidents you don't want re-alerting on.
 
 `service::extract_full` tries the following, in order:
 
-1. **Config hint** — an explicit `source_to_service` entry pins a known
+1. **Config hint**  -  an explicit `source_to_service` entry pins a known
    source (e.g. `"tcp://10.0.4.12:5140" = "us-east-payment"`).
-2. **Continuation inheritance** — stack-trace frames and `caused by:`
+2. **Continuation inheritance**  -  stack-trace frames and `caused by:`
    lines reuse the most recent service for the same source.
-3. **JSON `service` field** — `{"service":"payment-api", …}`.
-4. **`svc=name` / `service=name` key-value** — common in
+3. **JSON `service` field**  -  `{"service":"payment-api", …}`.
+4. **`svc=name` / `service=name` key-value**  -  common in
    structured-text formats.
-5. **`LEVEL service:` prefix** — `ERROR payment-api: connection refused`.
-6. **Bracket prefix** — `[payment-api] doing work` (level words rejected).
-7. **Fallback** — the ingest source string (`tcp://host:port`). Never
+5. **`LEVEL service:` prefix**  -  `ERROR payment-api: connection refused`.
+6. **Bracket prefix**  -  `[payment-api] doing work` (level words rejected).
+7. **Fallback**  -  the ingest source string (`tcp://host:port`). Never
    empty.
 
 This is unit-tested at `gateway/aegis-core/src/service.rs`.

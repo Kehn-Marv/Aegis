@@ -1,4 +1,4 @@
-# Splunk AI Assistant 2.0 — integration notes
+﻿# Splunk AI Assistant 2.0  -  integration notes
 
 > How Aegis complements Splunk AI Assistant 2.0 (SAIA) in the
 > Agentic Ops Hackathon context.
@@ -83,7 +83,7 @@ index=aegis sourcetype=aegis:metric host=us-east
 If Splunk exposes a programmatic SAIA endpoint, AegisOps could add an
 optional `saia.review_decision` step: after the hosted model proposes an
 `override`, the agent would ask SAIA to sanity-check the justification
-before actuation. The hook point is `agent/aegis_ops/reasoner.py` —
+before actuation. The hook point is `agent/aegis_ops/reasoner.py`  - 
 no gateway changes required.
 
 Until then, the documented integration path above is the authentic

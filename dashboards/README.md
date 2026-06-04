@@ -1,4 +1,4 @@
-# Aegis Splunk dashboard
+﻿# Aegis Splunk dashboard
 
 `aegis.json` is a Splunk Dashboard Studio definition that visualises the
 four pillars of Aegis: noise gate, causal chains, incident memory, and
@@ -21,9 +21,9 @@ decision cards.
 | Top KPIs           | Health state, noise stopped %, incidents remembered, queue depth                  |
 | Decision cards     | Every focused recommendation Aegis surfaced (state, root cause, headline)         |
 | Causal chains      | Which service broke first in each multi-service incident                          |
-| Incident memory    | Stored fingerprints — resolved ones carry the cause + fix the engineer recorded   |
+| Incident memory    | Stored fingerprints  -  resolved ones carry the cause + fix the engineer recorded   |
 | Noise gate         | Ingest vs forwarded chart, top suppressed signatures, classifier verdict          |
-| First-occurrence   | Rate of new signatures — spikes mean deploys or incidents                         |
+| First-occurrence   | Rate of new signatures  -  spikes mean deploys or incidents                         |
 | Silent services    | Services that were talking and went quiet                                         |
 | CDTSM forecasts    | Splunk-Hosted CDTSM 15-min forecasts of queue depth + dedup savings (Cloud only)  |
 

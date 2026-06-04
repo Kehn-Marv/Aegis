@@ -1,4 +1,4 @@
-# Aegis — Architecture Diagram
+﻿# Aegis  -  Architecture Diagram
 
 Aegis sits between your services and Splunk. A self-driving **workload**
 microservice produces telemetry; the **Aegis gateway** (one Rust daemon)
@@ -13,7 +13,7 @@ flowchart LR
         OTEL["OTel SDK<br/>logs · metrics · traces"]
     end
 
-    subgraph EDGE["Aegis gateway (Rust daemon — one process)"]
+    subgraph EDGE["Aegis gateway (Rust daemon  -  one process)"]
         ING["Ingest TCP/UDP"]
         GATE["Noise gate<br/>signature dedup"]
         CAUSAL["Causal chain<br/>what broke first"]
@@ -84,7 +84,7 @@ flowchart LR
   signature once with MiniLM embeddings; the gateway attaches the verdict.
 * **AegisOps agent** runs `observe → reason → act`: it reads the gateway's
   decision card, grounds an LLM prompt in it, and may call low-risk Aegis
-  tools — auditing every decision to Splunk.
+  tools  -  auditing every decision to Splunk.
 * **One LLM flag, three transports:** local **Ollama**, Splunk **AI Toolkit
   `| ai`**, or **Splunk Hosted Models**.
 * **Aegis AI app** (Splunkbase-shaped) adds a Custom Alert Action and the
@@ -94,7 +94,7 @@ flowchart LR
 
 ```text
 workload ──raw logs (TCP 5140)──▶ Aegis gateway ──processed (HEC)──▶ Splunk
-   │                                   │  ▲                            │
+   │                                    │  ▲                            │
    └── OTLP ▶ OTel Collector ▶ HEC ────┘  │ REST + MCP (7321)          ▼
                                           ├──▶ React control panel   Dashboards
                                           ├──▶ external AI agents (MCP)
@@ -107,5 +107,5 @@ the data plane writes on its hot path.
 
 ---
 
-The full deep dive — per-stage state machines, memory/perf envelope, and the
-file map — lives in [`docs/architecture.md`](docs/architecture.md).
+The full deep dive  -  per-stage state machines, memory/perf envelope, and the
+file map  -  lives in [`docs/architecture.md`](docs/architecture.md).

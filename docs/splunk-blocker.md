@@ -1,4 +1,4 @@
-# Splunk Hosted Models — provisioning blocker and the three live transports
+﻿# Splunk Hosted Models  -  provisioning blocker and the three live transports
 
 > Honest writeup of an infrastructure wall hit during the Splunk
 > Agentic Ops Hackathon 2026 and the **two** architectural pivots that
@@ -29,22 +29,22 @@ Splunk sales.
 
 End-to-end, in order:
 
-1. **Local Splunk Enterprise + Developer License** — confirmed
+1. **Local Splunk Enterprise + Developer License**  -  confirmed
    SLIM-backed Hosted Models are Cloud-only.
-2. **Splunk Cloud 14-day trial** — provisioned, logged in as
+2. **Splunk Cloud 14-day trial**  -  provisioned, logged in as
    `sc_admin`.
-3. **AI Toolkit app** — installed from Splunkbase. Upgraded to 5.7.4.
-4. **Splunk AI Assistant app** — installed to trigger the global AI
+3. **AI Toolkit app**  -  installed from Splunkbase. Upgraded to 5.7.4.
+4. **Splunk AI Assistant app**  -  installed to trigger the global AI
    Terms of Service prompt. Accepted the ToS.
-5. **`apply_ai_commander_command` capability** — verified granted to
+5. **`apply_ai_commander_command` capability**  -  verified granted to
    `sc_admin`.
-6. **Connections → New Connection → LLM → Splunk Hosted (SLIM API)** —
+6. **Connections → New Connection → LLM → Splunk Hosted (SLIM API)**  - 
    provider dropdown said *No providers found*. Forcing a custom LLM
    connection threw `HTTP 500 (Internal Server Error)` on
    `/services/configs/sc_admin` and `404 (Not Found)` on
    `/servicesNS/...` from the AI Toolkit's own React app
    (DevTools console verified).
-7. **Search & Reporting `| makeresults | ai prompt=...`** — same
+7. **Search & Reporting `| makeresults | ai prompt=...`**  -  same
    underlying error: no SLIM provider wired up.
 
 The 14-day automated trial's REST API is locked down to prevent
@@ -52,7 +52,7 @@ abuse of the SLIM API. Provisioning Hosted Models on these trials
 requires a manual flip by a Splunk sales engineer or hackathon
 organiser.
 
-## Plan A′ — AITK Connection Management + local Ollama (LIVE)
+## Plan A′  -  AITK Connection Management + local Ollama (LIVE)
 
 This is the path we should have started with. AITK 5.6+ supports
 **user-defined LLM connections**, and Ollama is one of the supported
@@ -61,8 +61,8 @@ generative AI capability in security operations with the AITK*,
 section "Setup for the AITK AI command", which explicitly calls out
 Ollama as a supported on-prem LLM).
 
-So we get the **full `| ai` SPL experience** — audited in `_audit`,
-reproducible from saved searches, embeddable in dashboards — with the
+So we get the **full `| ai` SPL experience**  -  audited in `_audit`,
+reproducible from saved searches, embeddable in dashboards  -  with the
 LLM call ultimately served by local Ollama on the same machine as
 Splunk Enterprise. No SLIM API. No 14-day trial gate.
 
@@ -93,7 +93,7 @@ INFO SplunkAITransport initialised: provider=ollama_local model=gpt-oss:20b
 This is a genuine integration with the AI Toolkit and the SPL `| ai`
 surface.
 
-## Plan B — raw Ollama (LIVE, default)
+## Plan B  -  raw Ollama (LIVE, default)
 
 The original Plan B from the first iteration of this doc. Now reframed
 as the **edge-first default**: when the agent is deployed *at* an edge
@@ -108,7 +108,7 @@ want. So:
 
 The Aegis AI Splunk app (`apps/aegis_ai/`) similarly uses raw Ollama
 via `splunklib.ai.OpenAIModel(base_url=…)` because the
-`splunklib.ai.Agent` SDK doesn't itself route through AITK — it speaks
+`splunklib.ai.Agent` SDK doesn't itself route through AITK  -  it speaks
 OpenAI-compatible HTTP directly. (See
 [`docs/aitk-ollama.md`](aitk-ollama.md), section "Wire it into the
 Aegis AI Splunk app", for the rationale.)
@@ -125,11 +125,11 @@ Aegis AI Splunk app", for the rationale.)
 
 ## What's preserved for the SLIM path (`transport = "splunk_ai"`)
 
-* `agent/aegis_ops/transports.py :: SplunkAITransport` — full
+* `agent/aegis_ops/transports.py :: SplunkAITransport`  -  full
   `| ai` SPL builder + `oneshot` plumbing.
-* `agent/aegis_ops/splunk_client.py` — `oneshot()` + `HecClient` used
+* `agent/aegis_ops/splunk_client.py`  -  `oneshot()` + `HecClient` used
   by `SplunkAITransport` and the audit pipeline.
-* `sidecar/aegis_sidecar/splunk_ai.py` — sidecar classifier transport
+* `sidecar/aegis_sidecar/splunk_ai.py`  -  sidecar classifier transport
   for `| ai`. Wired through `hosted_model.py`.
 * All env-var contracts (`AEGIS_SPLUNK_URL`, `AEGIS_SPLUNK_TOKEN`,
   `AEGIS_SPLUNK_AI_*`) preserved.
@@ -146,7 +146,7 @@ model    = "gpt-oss-20b"        # or "gpt-oss-120b" or "Foundation-Sec-1.1-8B-In
 ```
 
 No code changes, no redeployment, no UI changes. Same prompt, same
-decision schema, same audit trail — only `provider` differs from the
+decision schema, same audit trail  -  only `provider` differs from the
 `aitk_ollama` shape.
 
 ## Effect on Splunk AI Assistant 2.0 integration
@@ -159,11 +159,11 @@ What still works in the trial:
 
 * SAIA's SPL-search surface (it can still issue SPL queries on the
   user's behalf even without generative reasoning).
-* Any SPL search against `index=aegis sourcetype=aegis:agent` —
+* Any SPL search against `index=aegis sourcetype=aegis:agent`  - 
   including the recommended operator workflow in
   [`docs/saia-integration.md`](saia-integration.md).
 * The new Aegis-AI custom alert action and `| aegisreason` custom
-  search command from `apps/aegis_ai/` — these don't depend on SAIA
+  search command from `apps/aegis_ai/`  -  these don't depend on SAIA
   at all; they use `splunklib.ai.Agent` directly.
 
 What doesn't:
@@ -177,7 +177,7 @@ transport** (`SplunkAITransport`, `sidecar/splunk_ai.py`) **and**
 exercises that transport *live* via the `aitk_ollama` shape (AITK
 Connection Management → Ollama → `gpt-oss:20b`). The pure
 SLIM-backed path is hibernated only because the provisioned
-environment to run it against does not exist on a 14-day trial — but
+environment to run it against does not exist on a 14-day trial  -  but
 the SPL `| ai` surface, the AITK Connection Management UI, and the
 `gpt-oss:20b` model identifier are **all exercised in the demo**.
 

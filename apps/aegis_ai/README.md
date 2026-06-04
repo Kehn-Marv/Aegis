@@ -1,4 +1,4 @@
-# Aegis AI — Splunk App
+﻿# Aegis AI  -  Splunk App
 
 A Splunkbase-shaped Splunk app that exercises the **`splunklib.ai`**
 agent SDK released with `splunk-sdk-python` to put two AI capabilities
@@ -11,7 +11,7 @@ searches now know about the new sourcetypes Aegis emits
 
 ## What it ships
 
-### 1. Custom Alert Action — `aegis_severity_assessment`
+### 1. Custom Alert Action  -  `aegis_severity_assessment`
 
 Triggered by a saved search that watches `sourcetype=aegis:metric` for
 abnormally large suppressed-line counts. When it fires:
@@ -37,7 +37,7 @@ Result schema:
 }
 ```
 
-### 2. Custom Search Command — `| aegisreason`
+### 2. Custom Search Command  -  `| aegisreason`
 
 A new SPL verb that enriches any pipeline with an LLM recommendation per
 record. The intended use case is post-hoc reasoning over agent decisions:
@@ -51,8 +51,8 @@ index="aegis" sourcetype="aegis:agent" earliest=-1h
 
 The command adds two fields per row:
 
-* `aegis_ai_recommendation` — full JSON of the structured recommendation
-* `aegis_ai_recommendation_text` — flat string suitable for `| table`
+* `aegis_ai_recommendation`  -  full JSON of the structured recommendation
+* `aegis_ai_recommendation_text`  -  flat string suitable for `| table`
 
 Recommendation schema:
 
@@ -80,7 +80,7 @@ identically with:
 | Any vLLM / TGI / OpenAI deployment | that endpoint | per-deployment |
 
 The default uses the same `gpt-oss:20b` model identifier Splunk Hosted
-Models publishes — so when an environment with SLIM access becomes
+Models publishes  -  so when an environment with SLIM access becomes
 available, *only the env-var changes* and the entire app starts using
 Splunk-hosted gpt-oss-20b with **zero code modification**.
 
@@ -141,7 +141,7 @@ The repository ships a vetted package and report:
 > The `savedsearches.conf` in this repo now includes searches for the
 > new Aegis v0.2 sourcetypes (`aegis:decision`, `aegis:causal`,
 > `aegis:incident`, `aegis:silent`). Rebuild the tarball before
-> re-running AppInspect locally — the structure didn't change, only
+> re-running AppInspect locally  -  the structure didn't change, only
 > the saved-search definitions did.
 
 ### Rebuild the tarball and re-validate
@@ -166,13 +166,13 @@ success:       104
 The five remaining warnings are all **environment-only** (do not affect
 Splunkbase acceptance):
 
-1. `check_aarch64_compatibility` — skipped on Windows (will run on AppInspect Cloud).
-2. `check_idx_binary_compatibility` — skipped on Windows.
-3. `check_symlink_outside_app` — skipped on Windows.
-4. `check_for_indexer_synced_configs` — `default/inputs.conf` only monitors
+1. `check_aarch64_compatibility`  -  skipped on Windows (will run on AppInspect Cloud).
+2. `check_idx_binary_compatibility`  -  skipped on Windows.
+3. `check_symlink_outside_app`  -  skipped on Windows.
+4. `check_for_indexer_synced_configs`  -  `default/inputs.conf` only monitors
    the app's own log file (not synced to indexers in Splunk Cloud
    Victoria stack); this is intentional for a single-host app.
-5. `check_for_python_script_existence` — Splunk Enterprise 8.0 cross-compat
+5. `check_for_python_script_existence`  -  Splunk Enterprise 8.0 cross-compat
    warning; AITK 5.6+ and Splunk Enterprise 9+/10+ are Python 3 only.
 
 Run `splunk-appinspect inspect dist/aegis_ai.tar.gz --mode precert` or
@@ -188,12 +188,12 @@ index="_internal" source="*aegis_ai.log"
 surfaces every log line both entry points emit. The most common failure
 modes are:
 
-* `httpx.ConnectError: All connection attempts failed` — Ollama is not
+* `httpx.ConnectError: All connection attempts failed`  -  Ollama is not
   running, or `AEGIS_AI_LLM_BASE_URL` points at the wrong port.
-* `KeyError: 'index'` in the alert action — the `output_index` in the
+* `KeyError: 'index'` in the alert action  -  the `output_index` in the
   saved-search `action.aegis_severity_assessment.param.output_index`
   doesn't exist; create it under *Settings → Indexes*.
-* `pydantic.ValidationError` on the LLM reply — the model returned
+* `pydantic.ValidationError` on the LLM reply  -  the model returned
   something off-schema. The agent SDK already retries internally; if
   you see this consistently, switch to a larger model
   (e.g. `gpt-oss:20b` → `qwen2.5:7b` is more reliable on small machines).

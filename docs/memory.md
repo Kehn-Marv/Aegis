@@ -1,4 +1,4 @@
-# Incident memory
+﻿# Incident memory
 
 Aegis's institutional memory: every causal chain becomes a fingerprint in
 a local SQLite store. When a new chain happens, Aegis searches its memory
@@ -44,10 +44,10 @@ score = 0.50 * Jaccard(signatures)        # same error patterns?
 Weights live at the top of `incident_memory.rs::similarity()` so
 operators can tune the formula without leaving the file.
 
-* **Jaccard** is intersection / union of two sets — fast, intuitive,
+* **Jaccard** is intersection / union of two sets  -  fast, intuitive,
   bounded [0, 1].
 * **LCS ratio** is the longest common subsequence length divided by the
-  longer chain length — captures temporal order similarity.
+  longer chain length  -  captures temporal order similarity.
 
 No ML model is involved. No embeddings, no vector DB, no network. The
 store handles 10,000 incidents in well under one millisecond on a laptop
@@ -59,9 +59,9 @@ Rust-side scan over small JSON blobs.
 ```text
 CausalChain fires
     ↓
-Store::record_chain() — write a new fingerprint (no cause/fix yet)
+Store::record_chain()  -  write a new fingerprint (no cause/fix yet)
     ↓
-Store::search_similar() — score against all known fingerprints
+Store::search_similar()  -  score against all known fingerprints
     ↓
 DecisionCard emitted with similar_incidents = top-N matches
     ↓
@@ -69,7 +69,7 @@ Engineer acts; clicks "I'm on it"; investigates; fixes
     ↓
 Engineer fills in the 2-line resolution card
     ↓
-Store::resolve() — attach cause + fix to the fingerprint
+Store::resolve()  -  attach cause + fix to the fingerprint
     ↓
 Next time a similar chain happens, the decision card carries
 the engineer's fix verbatim
@@ -109,7 +109,7 @@ nudge is unit-tested at
 | File          | `[memory].path` (default `data/aegis-incidents.sqlite`)              |
 | Memory cost   | ~1 KB per fingerprint in memory while scanning                        |
 | Disk cost     | ~2 KB per fingerprint on disk                                         |
-| Search cost   | O(N) on `recent(2048)` — sub-ms at typical N                          |
+| Search cost   | O(N) on `recent(2048)`  -  sub-ms at typical N                          |
 | Backup        | Just copy the `.sqlite` file. WAL mode is on; copy while running OK.  |
 
 If you want to share institutional memory across two regional gateways,
@@ -117,4 +117,4 @@ point both `[memory].path` entries at the same network filesystem path.
 SQLite handles WAL-mode concurrent reads happily; writes still serialise.
 For larger fleets, run one Aegis daemon per region and replicate
 incident memory upstream into Splunk under
-`sourcetype=aegis:incident` — the audit trail is complete there too.
+`sourcetype=aegis:incident`  -  the audit trail is complete there too.

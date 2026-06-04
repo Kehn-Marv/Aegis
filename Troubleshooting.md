@@ -1,4 +1,4 @@
-# Troubleshooting
+﻿# Troubleshooting
 
 Symptom → fix reference. Setup steps live in [`README.md`](README.md).
 
@@ -9,8 +9,8 @@ Symptom → fix reference. Setup steps live in [`README.md`](README.md).
 ### Port already in use (Windows)
 
 When the daemon exits right after `bind ... already in use` (and you may see
-`task panicked task="dedup"`), another process — usually a stale
-`aegis-daemon` — still holds that port. In PowerShell:
+`task panicked task="dedup"`), another process  -  usually a stale
+`aegis-daemon`  -  still holds that port. In PowerShell:
 
 ```powershell
 # 1. Find which PID owns the port (swap 7321 for 5140, 5141, 5142, 7322, …)
@@ -25,7 +25,7 @@ Get-Process aegis-daemon -ErrorAction SilentlyContinue | Stop-Process -Force
 ```
 
 Path C ports: **us-east** → `5140` / `7321`; **eu-west** → `5142` / `7322`.
-To run both regions, each port must be free — do not start a second daemon on
+To run both regions, each port must be free  -  do not start a second daemon on
 ports the first one still owns.
 
 | Symptom | Fix |
@@ -44,10 +44,10 @@ ports the first one still owns.
 
 | Symptom | Fix |
 |---|---|
-| `cascade` pattern fires but the decision card stays green | The cascade overflows the configured causal window. Demo configs use `[causal].window_secs = 30` — make sure you're using `aegis.demo.toml` and that the cascade hasn't been customised to take longer than 30s. |
+| `cascade` pattern fires but the decision card stays green | The cascade overflows the configured causal window. Demo configs use `[causal].window_secs = 30`  -  make sure you're using `aegis.demo.toml` and that the cascade hasn't been customised to take longer than 30s. |
 | Decision card shows the wrong service as root cause | The earliest service's first-fire fell out of the causal window before the chain triggered. Increase `[causal].window_secs`. Default in `aegis.example.toml` is 60s. |
-| Stack-trace continuation lines (`  at db::…`) get tagged with their TCP source as a phantom "service" | Should be inherited automatically since v0.2 — `service::extract_full` walks per-source last-known-service. If you see this, file an issue with the continuation pattern. |
-| `[CHAIN ...]` never fires even with 3 services breaking | Check `[causal].min_services` and `[causal].cooldown_secs`. Default min is 3; lower to 2 for small fleets. Cooldown suppresses re-emission for the same root cause — if you keep restarting the cascade, you need to wait or restart the daemon. |
+| Stack-trace continuation lines (`  at db::…`) get tagged with their TCP source as a phantom "service" | Should be inherited automatically since v0.2  -  `service::extract_full` walks per-source last-known-service. If you see this, file an issue with the continuation pattern. |
+| `[CHAIN ...]` never fires even with 3 services breaking | Check `[causal].min_services` and `[causal].cooldown_secs`. Default min is 3; lower to 2 for small fleets. Cooldown suppresses re-emission for the same root cause  -  if you keep restarting the cascade, you need to wait or restart the daemon. |
 | `[DECIDE state=green]` immediately after a chain | This is normal: after `[decision].idle_to_green_secs` of quiet (default 300s, demo 30s), Aegis auto-downshifts. The chain itself is still stored in incident memory. |
 
 ---
@@ -92,7 +92,7 @@ ports the first one still owns.
 | `pip install -e .` in `sidecar/` fails with `ConnectionResetError` on torch | Transient network drop on the PyTorch wheel. Retry with `pip install torch --index-url https://download.pytorch.org/whl/cpu` first, then `pip install -e .`. |
 | Sidecar takes ~30s on first `/classify` call | Lazy-loading the sentence-transformer (~80 MB). Subsequent calls are sub-millisecond. |
 | UI shows "Gateway unreachable" | Daemon isn't running, or its MCP/REST port differs from `7321`. Daemon log should say `Control API at 127.0.0.1:7321/api/status`. |
-| UI decision-card panel doesn't update | The poll runs every 2 s; if `/api/status` is reachable but always returns `decision: null`, you haven't fired a chain yet — run the `cascade` pattern. |
+| UI decision-card panel doesn't update | The poll runs every 2 s; if `/api/status` is reachable but always returns `decision: null`, you haven't fired a chain yet  -  run the `cascade` pattern. |
 
 ---
 
@@ -104,7 +104,7 @@ ports the first one still owns.
 | Agent log `CERTIFICATE_VERIFY_FAILED` on port 8089 | Set `[splunk] verify_tls = false` in `agent/configs/aegis-ops.toml`. |
 | Agent log `ollama call failed` / `conf=0.00` | On CPU-only Ollama, the first call can take several minutes per gateway. Set `[llm.ollama] timeout_secs = 600` and warm the model first (`ollama run qwen2.5:3b "reply pong"`). |
 | Agent two gateways: one succeeds, one times out | Ollama serializes requests on CPU. Expect ~5 min total wall clock for two gateways. |
-| `aegis-ops run --config ...` fails | The CLI doesn't have a `run` subcommand — just `aegis-ops --config configs\aegis-ops.toml --once -v`. |
+| `aegis-ops run --config ...` fails | The CLI doesn't have a `run` subcommand  -  just `aegis-ops --config configs\aegis-ops.toml --once -v`. |
 | Config edits lost after `Copy-Item` | `agent/configs/aegis-ops.toml` is **gitignored**. Copy from `aegis-ops.example.toml` once, then edit in place. |
 
 ---
@@ -113,5 +113,5 @@ ports the first one still owns.
 
 | Symptom | Fix |
 |---|---|
-| Worried about committing tokens | Only `*.example.toml` files are tracked. Run `git status` before pushing — no real config should be staged. |
+| Worried about committing tokens | Only `*.example.toml` files are tracked. Run `git status` before pushing  -  no real config should be staged. |
 | Accidentally committed a token | Rotate immediately in Splunk Web, remove from git history, never reuse. |

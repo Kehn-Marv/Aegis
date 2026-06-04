@@ -1,4 +1,4 @@
-# Aegis — FinOps math, worked example
+﻿# Aegis  -  FinOps math, worked example
 
 ## Enterprise persona (who pays for this)
 
@@ -10,7 +10,7 @@
 | **Deployment** | One Aegis gateway per region (DaemonSet or VM), shared Python sidecar |
 | **Success metric** | ≥90% ingest reduction on error spam *without* losing first-occurrence context |
 
-The math below uses **one crash-looping service** — multiply by however
+The math below uses **one crash-looping service**  -  multiply by however
 many services in your fleet actually behave this way during incidents.
 
 ## Scenario: one crash-looping service
@@ -51,7 +51,7 @@ Behaviour per 30-second window:
   `{"kind":"collapsed","signature":"...","count":5000,"window_secs":30, "sample":"..."}`,
   ~250 bytes after JSON overhead.
 * **Plus** one ~150-byte `aegis:selfmetric` event emitted every 15 s
-  (twice per window) — independent of how many error lines arrived.
+  (twice per window)  -  independent of how many error lines arrived.
 
 Per 30-second window from this one service:
 
@@ -110,7 +110,7 @@ service crash-loops once a month for 8 hours before catch:
 | × $1,800/GB-year, prorated                  | **~$4.1M**  |
 
 Even if those numbers are off by an order of magnitude, the order of
-magnitude *itself* is meaningful — and this is just the dedup story.
+magnitude *itself* is meaningful  -  and this is just the dedup story.
 The routine-traffic summarization layer rolls `routine`-classified
 collapses into periodic `aegis:summary` events for additional savings
 on the 95%+ of traffic that isn't an anomaly.

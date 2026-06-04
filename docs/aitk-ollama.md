@@ -1,4 +1,4 @@
-# AITK + Ollama — bringing `| ai` SPL to a Developer-License Splunk
+﻿# AITK + Ollama  -  bringing `| ai` SPL to a Developer-License Splunk
 
 > The third live LLM transport for Aegis.
 
@@ -6,7 +6,7 @@
 
 The Splunk AI Toolkit (AITK) v5.6+ introduced **LLM Connectors** in its
 Connection Management UI. These connectors let SPL `| ai` route to any
-of the LLM providers AITK supports — including **local Ollama**.
+of the LLM providers AITK supports  -  including **local Ollama**.
 
 That gives us a working `| ai` integration without needing SLIM API
 access on a 14-day Splunk Cloud trial:
@@ -25,7 +25,7 @@ SPL search  →  | ai prompt=... provider=ollama_local model=gpt-oss:20b
 ```
 
 This is materially different from our raw-Ollama transport because the
-LLM call happens **inside Splunk's search pipeline** — every invocation
+LLM call happens **inside Splunk's search pipeline**  -  every invocation
 is automatically logged in `_audit`, the SPL itself is reproducible from
 the dashboard, and switching to true Splunk Hosted Models later is a
 one-word change (`provider=ollama_local` → `provider=splunk_hosted`).
@@ -78,7 +78,7 @@ You should get back a row with an `ai_result_1` field containing `pong`
 within ~3 seconds of the first call (longer on the very first one while
 Ollama loads the model into memory). If you get a `provider not found`
 error, the connection name doesn't match the `provider=` value in the
-SPL — re-check step 3.
+SPL  -  re-check step 3.
 
 ## Wire it into AegisOps Agent
 
@@ -101,7 +101,7 @@ verify_tls = false
 
 Then `aegis-ops --config configs/aegis-ops.toml --once -v` and look
 for this startup line. On CPU Ollama with `transport = "ollama"`, allow
-~5 minutes per gateway — see [`../Troubleshooting.md`](../Troubleshooting.md).
+~5 minutes per gateway  -  see [`../Troubleshooting.md`](../Troubleshooting.md).
 
 ```
 INFO AegisOps starting: ... llm=splunk_ai splunk=on audit=...
@@ -128,7 +128,7 @@ If you'd rather route the app through AITK too (e.g. to centralise
 auditing in `_audit`), point `AEGIS_AI_LLM_BASE_URL` at AITK's own
 chat-completions surface when that becomes available. As of AITK
 5.7.4 / May 2026, AITK does not expose an OpenAI-compatible HTTP
-endpoint of its own — only the SPL `| ai` command — so the app uses
+endpoint of its own  -  only the SPL `| ai` command  -  so the app uses
 Ollama's OpenAI surface directly.
 
 ## Migrating to true Splunk Hosted Models later

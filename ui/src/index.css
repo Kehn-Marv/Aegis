@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=VT323&display=swap');
 @import "tailwindcss";
 
 /* ═══════════════════════════════════════════════════════════════════════
@@ -11,7 +11,7 @@
   --font-mono: 'SF Mono', 'JetBrains Mono', ui-monospace, Menlo, Consolas, monospace;
 
   /* ── Palette ── */
-  --color-page: #d8d0be;
+  --color-page: #b0a892;
   --color-panel: #c8c0a6;
   --color-panel-highlight: #d2cab2;
   --color-panel-mid: #bcb49a;

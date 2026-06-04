@@ -92,6 +92,40 @@ function Match({ match }: { match: IncidentMatch }) {
   );
 }
 
+/* ─── Toast SVG icons ────────────────────────────────────────────────────── */
+const toastIcons: Record<string, React.ReactNode> = {
+  check: (
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+      <polyline points="20 6 9 17 4 12" />
+    </svg>
+  ),
+  search: (
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+      <circle cx="11" cy="11" r="8" />
+      <line x1="21" y1="21" x2="16.65" y2="16.65" />
+    </svg>
+  ),
+  clipboard: (
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2" />
+      <rect x="8" y="2" width="8" height="4" rx="1" ry="1" />
+    </svg>
+  ),
+  undo: (
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+      <polyline points="1 4 1 10 7 10" />
+      <path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10" />
+    </svg>
+  ),
+  info: (
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <circle cx="12" cy="12" r="10" />
+      <line x1="12" y1="16" x2="12" y2="12" />
+      <line x1="12" y1="8" x2="12.01" y2="8" />
+    </svg>
+  ),
+};
+
 /* ─── Centred backdrop toast ─────────────────────────────────────────────── */
 interface CentreToastProps {
   msg: string;
@@ -101,7 +135,7 @@ interface CentreToastProps {
   onClose?: () => void;
 }
 
-function CentreToast({ msg, sub, visible, icon = "ℹ", onClose }: CentreToastProps) {
+function CentreToast({ msg, sub, visible, icon = "info", onClose }: CentreToastProps) {
   return createPortal(
     <div
       aria-live="assertive"
@@ -131,10 +165,10 @@ function CentreToast({ msg, sub, visible, icon = "ℹ", onClose }: CentreToastPr
           borderRadius: 20,
           maxWidth: "min(420px, calc(100vw - 48px))",
           textAlign: "center",
-          background: "linear-gradient(160deg, #2a2618 0%, #1a1a0e 100%)",
-          border: "1px solid rgba(200,144,96,0.2)",
+          background: "linear-gradient(160deg, #d2cab2 0%, #c8c0a6 100%)",
+          border: "1px solid rgba(0,0,0,0.08)",
           boxShadow:
-            "0 24px 64px -12px rgba(0,0,0,0.65), 0 4px 16px rgba(0,0,0,0.3), 0 0 0 1px rgba(255,250,218,0.04) inset",
+            "0 1px 0 0 rgba(255,255,255,0.55) inset, 0 24px 64px -12px rgba(40,36,20,0.35), 0 4px 16px rgba(0,0,0,0.2), 0 0 0 1px rgba(0,0,0,0.06)",
           opacity: visible ? 1 : 0,
           transform: visible ? "scale(1) translateY(0)" : "scale(0.9) translateY(16px)",
           transition:
@@ -150,19 +184,18 @@ function CentreToast({ msg, sub, visible, icon = "ℹ", onClose }: CentreToastPr
             display: "flex",
             alignItems: "center",
             justifyContent: "center",
-            background: "rgba(200,144,96,0.12)",
-            border: "1px solid rgba(200,144,96,0.25)",
-            fontSize: 20,
-            color: "#c89060",
+            background: "rgba(46,42,30,0.08)",
+            border: "1px solid rgba(46,42,30,0.12)",
+            color: "#5a5440",
           }}
         >
-          {icon}
+          {toastIcons[icon] ?? toastIcons.info}
         </div>
         <div
           style={{
             fontSize: 15,
             fontWeight: 700,
-            color: "#fffada",
+            color: "#2e2a1e",
             lineHeight: 1.4,
           }}
         >
@@ -172,7 +205,7 @@ function CentreToast({ msg, sub, visible, icon = "ℹ", onClose }: CentreToastPr
           <div
             style={{
               fontSize: 12,
-              color: "rgba(255,250,218,0.5)",
+              color: "#5a5440",
               lineHeight: 1.5,
             }}
           >
@@ -183,7 +216,7 @@ function CentreToast({ msg, sub, visible, icon = "ℹ", onClose }: CentreToastPr
           style={{
             marginTop: 4,
             fontSize: 10,
-            color: "rgba(255,250,218,0.25)",
+            color: "#8a8470",
             letterSpacing: "0.8px",
             textTransform: "uppercase",
           }}
@@ -281,7 +314,7 @@ export function DecisionCardPanel({
     showCentreToast(
       "You're on it",
       "Acknowledged — the team has been notified.",
-      "✓",
+      "check",
     );
     setTimeout(dismissCentreToast, 2800);
   }, [onAcknowledge, markActionDone, showCentreToast, dismissCentreToast]);
@@ -295,7 +328,7 @@ export function DecisionCardPanel({
       showCentreToast(
         "No past incidents on record",
         "This looks like a fresh case. Resolve it and the next on-call will have a head start.",
-        "📋",
+        "clipboard",
       );
       setTimeout(dismissCentreToast, 3500);
       return;
@@ -307,7 +340,7 @@ export function DecisionCardPanel({
     showCentreToast(
       "Filtered memory to related incidents",
       "Scroll down to see the incident history for this root cause.",
-      "🔍",
+      "search",
     );
     setTimeout(dismissCentreToast, 2800);
   }, [card, onShowMore, markActionDone, showCentreToast, dismissCentreToast]);
@@ -318,7 +351,7 @@ export function DecisionCardPanel({
     showCentreToast(
       "Feedback noted",
       "Marked as 'looks different' — Aegis will refine its matching.",
-      "↩",
+      "undo",
     );
     setTimeout(dismissCentreToast, 2800);
   }, [onDifferent, markActionDone, showCentreToast, dismissCentreToast]);
@@ -350,12 +383,12 @@ export function DecisionCardPanel({
           </div>
           <div className="lcd-panel scan-sweep">
             <div className="flex items-center gap-2">
-              <span className="text-sm font-bold text-[#e07818]">SYSTEM READY</span>
+              <span className="text-lg font-bold text-[#e07818]" style={{ fontFamily: "'VT323', monospace" }}>SYSTEM READY</span>
               <span className="ml-auto font-mono text-[10px] text-[rgba(255,250,218,0.3)]">
                 v0.2.0
               </span>
             </div>
-            <p className="mt-3 text-sm leading-relaxed text-[rgba(255,250,218,0.6)]">
+            <p className="mt-3 text-sm leading-relaxed text-[rgba(255,250,218,0.6)] first-letter:uppercase">
               {card?.headline ??
                 "No causal chains, no silent services, dedup is working. Aegis is watching for first-fire patterns."}
             </p>
@@ -463,8 +496,8 @@ export function DecisionCardPanel({
           >
             <div className="flex items-center gap-2">
               <span
-                className="text-[10px] font-bold uppercase tracking-[1.4px]"
-                style={{ color: isRed ? "#c83020" : "#c8a820" }}
+                className="text-sm font-bold uppercase tracking-[1.4px]"
+                style={{ color: isRed ? "#c83020" : "#c8a820", fontFamily: "'VT323', monospace" }}
               >
                 {isRed ? "ALERT" : "WARNING"}
               </span>
@@ -472,7 +505,7 @@ export function DecisionCardPanel({
             <h2 className="mt-2 text-2xl font-black uppercase tracking-[3px] text-[#e07818]">
               {card.root_cause_service ?? "Active incident"}
             </h2>
-            <p className="mt-3 text-sm leading-relaxed text-[rgba(255,250,218,0.75)]">
+            <p className="mt-3 text-sm leading-relaxed text-[rgba(255,250,218,0.75)] first-letter:uppercase">
               {card.headline}
             </p>
 
@@ -490,7 +523,7 @@ export function DecisionCardPanel({
           {/* Suggested step */}
           <div className="mt-4">
             <div className="eyebrow">Suggested Next Step</div>
-            <div className="module-card mt-2 text-sm leading-relaxed text-[#2e2a1e]">
+            <div className="lcd-panel mt-2 text-sm leading-relaxed" style={{ color: "rgba(255,250,218,0.55)" }}>
               {card.suggested_next_step}
             </div>
           </div>

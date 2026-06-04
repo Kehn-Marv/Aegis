@@ -1,4 +1,4 @@
-# Aegis — technical architecture (deep dive)
+﻿# Aegis  -  technical architecture (deep dive)
 
 The at-a-glance diagram and the three submission-required highlights (Splunk
 interaction, AI integration, data flow) live at the root in
@@ -6,11 +6,11 @@ interaction, AI integration, data flow) live at the root in
 deep dive: the full system diagram, per-stage state machines, the data
 flows, and the assumptions Aegis makes about its environment.
 
-Aegis is one Rust daemon and four optional companions — a self-driving
+Aegis is one Rust daemon and four optional companions  -  a self-driving
 Python **workload** microservice that produces the telemetry, a Python **AI
 sidecar**, a React **control panel**, and an autonomous Python **agent**.
 Every in-process pillar runs inside the same `aegis-daemon` process and
-shares a single `Arc<Control>` + `Arc<Queue>` + `Arc<IncidentStore>` — no
+shares a single `Arc<Control>` + `Arc<Queue>` + `Arc<IncidentStore>`  -  no
 internal IPC, no second database, no service mesh.
 
 ```mermaid
@@ -167,7 +167,7 @@ when their conditions fire.
   resolved_at null).
 * `search_similar` reads the most recent ~2048 fingerprints into
   memory and scores each one against the new chain using a weighted
-  Jaccard + LCS formula. Scoring runs in Rust at native speed — the
+  Jaccard + LCS formula. Scoring runs in Rust at native speed  -  the
   whole search is sub-millisecond at typical store sizes.
 * `resolve` attaches a `ResolutionCard` (cause + fix) and stamps
   `resolved_at` + `resolved_in_minutes` (delta from chain `ts`).
@@ -178,7 +178,7 @@ when their conditions fire.
   `CausalChain`, the result of `Store::search_similar`, and the
   `ServiceCatalog` lookup for the root service. Output: one
   `DecisionCard` event.
-* Headline is rendered from the chain — "X broke first. Y followed Ns
+* Headline is rendered from the chain  -  "X broke first. Y followed Ns
   later. Root cause: X (NN% confidence)."
 * Suggested next step prefers the highest-similarity *resolved* past
   incident over any other match. Falls back to a first-time-nudge
@@ -242,14 +242,14 @@ flag the dedup loop reads on its hot path.
 | **AI Toolkit `\| ai`**      | Three live LLM transports (`ollama`, `aitk_ollama`, `splunk_ai`), one config flag switches between them                     |
 | **Hosted Models**           | Default `gpt-oss:20b` matches Hosted Models identifier; one env var flips to true SLIM-backed `gpt-oss-20b`                |
 | **CDTSM**                   | Two dashboard forecast panels; AegisOps reads the same forecast and surfaces it as a `PREDICTIVE SIGNAL` in the LLM prompt |
-| **`splunklib.ai`**          | Splunkbase app with Custom Alert Action + `\| aegisreason` Custom Search Command — AppInspect clean                          |
+| **`splunklib.ai`**          | Splunkbase app with Custom Alert Action + `\| aegisreason` Custom Search Command  -  AppInspect clean                          |
 | **Dashboard Studio**        | One dashboard with a panel per pillar + the FinOps headlines + CDTSM forecast lines                                          |
 
 ## Memory and performance envelope
 
 | Component             | Bound                                                       |
 |-----------------------|-------------------------------------------------------------|
-| Dedup open table      | `max_open_signatures` (default 4096) — bounded by config    |
+| Dedup open table      | `max_open_signatures` (default 4096)  -  bounded by config    |
 | Causal ring buffer    | `per_service_buffer` × known services (default 16 × N)      |
 | Silence heartbeats    | one entry per known service (~100 B each)                    |
 | Decision card slot    | one cached event in `Control` (single `Mutex`)              |
@@ -288,10 +288,10 @@ daemon's RSS sits well under 100 MB on Windows / Linux / macOS.
 
 The crate boundaries are:
 
-* `aegis-core` — pure library. No knowledge of MCP or daemon
+* `aegis-core`  -  pure library. No knowledge of MCP or daemon
   bootstrap. Reused by both the daemon and the MCP crate.
-* `aegis-mcp` — `rmcp` + `axum` glue. Owns the public HTTP surface
+* `aegis-mcp`  -  `rmcp` + `axum` glue. Owns the public HTTP surface
   (REST + MCP) and serves the built control-panel UI.
-* `aegis-daemon` — thin binary that constructs the shared
+* `aegis-daemon`  -  thin binary that constructs the shared
   `Control` / `Queue` / `IncidentStore` and runs both pipeline and
   MCP server.

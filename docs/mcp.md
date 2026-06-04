@@ -1,4 +1,4 @@
-# MCP integration — Aegis on **both sides** of the protocol
+﻿# MCP integration  -  Aegis on **both sides** of the protocol
 
 Aegis is intentionally bidirectional with respect to the Model Context
 Protocol:
@@ -8,10 +8,10 @@ Protocol:
 | **Aegis as MCP server** | External AI agents (Cursor, Claude Desktop, the official Splunk MCP TA, etc.) can hold conversation with Aegis's `Control` plane and call its tools | `http://127.0.0.1:7321/mcp` | Lets a human or third-party agent operate the edge gateway by natural language |
 | **AegisOps Agent as MCP client** | Our own autonomous agent talks to the **official Splunk MCP Server** (`splunk_run_query`) instead of the raw `/services/search/jobs/oneshot` REST endpoint | `https://<splunk-host>:8089/services/mcp` | Every observational call traverses the same MCP control plane judges will be auditing; full traffic visible in `index=_internal sourcetype=mcpjson "tools/call"` |
 
-The two directions are completely independent — you can enable either,
+The two directions are completely independent  -  you can enable either,
 both, or neither at deployment time.
 
-## Aegis MCP Server — tools published
+## Aegis MCP Server  -  tools published
 
 The Aegis daemon hosts a Model Context Protocol server that exposes
 eight tools any MCP-aware AI agent can call:
@@ -32,9 +32,9 @@ The three highlighted tools (`latest_decision`, `recent_incidents`,
 `resolve_incident`) are new in Aegis v0.2 and make the agent a real
 participant in the incident-memory loop. An AI agent can read the
 current card, look up past matches, attach a fix the engineer dictated
-in chat, and Aegis remembers — same flow as the React UI uses.
+in chat, and Aegis remembers  -  same flow as the React UI uses.
 
-Two transports are supported. **Use the HTTP transport** for the demo —
+Two transports are supported. **Use the HTTP transport** for the demo  - 
 it's the one that lets your AI agent control the *running* daemon with
 its live `Control` state. The stdio transport spawns a fresh process per
 session and is only useful for smoke-testing.
@@ -79,7 +79,7 @@ Add to `%USERPROFILE%\.cursor\mcp.json` (or your workspace's
 
 Then open Cursor → Settings → MCP and you should see `aegis` listed with
 its 5 tools. Try asking the chat: *"What is the current status of the
-Aegis gateway?"* — Cursor will call the `status` tool and show you the
+Aegis gateway?"*  -  Cursor will call the `status` tool and show you the
 live numbers.
 
 ### Claude Desktop
@@ -193,7 +193,7 @@ index=_internal sourcetype=mcpjson "tools/call" "splunk_run_query"
    Aegis's tools.
 3. **Both endpoints in a single Cursor/Claude session.** The chat-side
    orchestration block above shows how a single LLM holds tools from
-   *both* Aegis and Splunk in one context — the canonical
+   *both* Aegis and Splunk in one context  -  the canonical
    multi-server MCP demo.
 
 ### Implementation notes
@@ -222,7 +222,7 @@ index=_internal sourcetype=mcpjson "tools/call" "splunk_run_query"
 * **No authentication on the HTTP transport.** The default bind is
   `127.0.0.1:7321`, which limits exposure to localhost. If you need to
   expose this beyond the local machine, put it behind a reverse proxy
-  with TLS + bearer-token auth — the `rmcp` SDK ships an example of the
+  with TLS + bearer-token auth  -  the `rmcp` SDK ships an example of the
   middleware pattern.
 * **`--mcp-only` (stdio)** uses a fresh `Control` per connection, so
   counters always read zero in that mode. Use the HTTP transport for any

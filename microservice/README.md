@@ -1,10 +1,10 @@
-# Aegis Workload — self-driving telemetry microservice
+﻿# Aegis Workload  -  self-driving telemetry microservice
 
 This is the app that *produces* the telemetry Aegis protects. It simulates a
 small e-commerce service fleet (`api-gateway`, `auth`, `checkout`,
 `payment-api`, `orders`, …) and, on its own schedule, injects realistic
-incidents — a payment cascade, an auth crash-loop, a latency spike, a silent
-service — then recovers. You start it once; it decides what to do by itself.
+incidents  -  a payment cascade, an auth crash-loop, a latency spike, a silent
+service  -  then recovers. You start it once; it decides what to do by itself.
 
 It emits the full OpenTelemetry signal set and streams its raw log lines
 straight into the Aegis gateway, so it replaces running `log_spammer.py`
@@ -29,7 +29,7 @@ python -m workload
 ```
 
 Open **http://localhost:8080** for the live control room. That's the whole
-setup — no flags, no manual traffic commands.
+setup  -  no flags, no manual traffic commands.
 
 If the Aegis gateway is running (ingest on `tcp/5140`), the workload connects
 automatically and you'll see incidents light up the Aegis decision card. If the
@@ -48,7 +48,7 @@ gateway isn't up yet, the workload keeps retrying in the background.
 | `SIM_BASE_RPS` | `24` | Baseline simulated requests/sec |
 
 When `OTEL_EXPORTER_OTLP_ENDPOINT` is unset the app still *produces* all five
-signals (visible at `GET /api/telemetry`) — it just doesn't try to export, so
+signals (visible at `GET /api/telemetry`)  -  it just doesn't try to export, so
 there are no noisy connection errors.
 
 ## Shipping to Splunk (the modern path)

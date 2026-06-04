@@ -1,11 +1,11 @@
-# AegisOps Agent
+﻿# AegisOps Agent
 
 Autonomous Python agent that observes Aegis edge gateways, reasons with
 a local LLM, and recommends or actuates bounded-window observability
 actions. Every decision is shipped to Splunk under
 `sourcetype=aegis:agent` for full audit.
 
-The agent reads the gateway's **decision card** directly — Aegis has
+The agent reads the gateway's **decision card** directly  -  Aegis has
 already done the causal attribution and looked up similar past
 incidents, so the LLM's job is to *act on* that card, not re-derive it.
 
@@ -33,7 +33,7 @@ All three produce the same JSON `Decision`. Switching is one line in
 
 The Ollama transport passes the `Decision` Pydantic JSON schema to
 Ollama's `format` parameter, which **enforces the schema at decode
-time** — even a small model can't emit malformed JSON.
+time**  -  even a small model can't emit malformed JSON.
 
 ## Policy modes
 
@@ -89,7 +89,7 @@ INFO [us-east] decision=noop(-) conf=0.95 exec=auto  | gateway healthy, no actio
 ```
 
 `conf=0.95` means the model returned a real decision. `conf=0.00` means
-the model returned nothing parseable — usually a timeout.
+the model returned nothing parseable  -  usually a timeout.
 
 ## Audit trail
 

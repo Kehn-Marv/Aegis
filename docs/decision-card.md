@@ -1,4 +1,4 @@
-# The decision card
+﻿# The decision card
 
 Aegis's decision card replaces the old "Execute" button. Instead of
 asking the engineer to pick a tool, Aegis answers a sharper question:
@@ -37,7 +37,7 @@ Three signals do the heavy lifting:
 | `state`             | Causal chain firing (red) / orange watch / green idle           |
 | `headline`          | Causal chain's temporal attribution, rendered as one sentence   |
 | `suggested_next_step` | Best matching resolved past incident → falls back to first-time nudge |
-| `business_impact`   | `[services]` block in `aegis.toml` — operator-curated text     |
+| `business_impact`   | `[services]` block in `aegis.toml`  -  operator-curated text     |
 | `similar_incidents` | Top-N matches from incident memory, each with cause + fix when set |
 
 ## Why no "execute" button
@@ -48,17 +48,17 @@ not a robot pressing buttons in production.*
 
 The card therefore offers three actions:
 
-* **`I'm on it`** — POSTs to `/api/decision/ack`. Logged for audit; no
+* **`I'm on it`**  -  POSTs to `/api/decision/ack`. Logged for audit; no
   side effects on production.
-* **`Show me more past incidents`** — opens the incident memory panel
+* **`Show me more past incidents`**  -  opens the incident memory panel
   so the engineer can browse the long tail of past chains.
-* **`This looks different`** — flags the card for review. Useful when
+* **`This looks different`**  -  flags the card for review. Useful when
   Aegis's similarity engine misfires; the operator's feedback is logged
   so we can tune thresholds without retraining anything.
 
 None of those reach into a customer's services. The bounded-window tools
 that do (`diagnostic`, `override`) are tucked into the Advanced section
-of the UI and the MCP `tool_router` — they're available for engineers
+of the UI and the MCP `tool_router`  -  they're available for engineers
 who want them, never the default path.
 
 ## State machine
@@ -74,7 +74,7 @@ who want them, never the default path.
        └──────── (auto) ────────┘
 
   Future work: ORANGE
-  — surfaced when a single service is misbehaving (volume spike,
+   -  surfaced when a single service is misbehaving (volume spike,
   rising signature velocity) but no multi-service chain has fired
   yet. The state machine has the variant today; the green→orange
   transition will land alongside CDTSM-trend integration in the next
@@ -112,7 +112,7 @@ fn suggest_next_step(root, links, similar) -> String {
 
 The function prefers the highest-similarity match with a recorded fix
 over a higher-similarity match without one. That ordering is what makes
-Aegis useful at 2 a.m. — an unresolved past incident isn't useful;
+Aegis useful at 2 a.m.  -  an unresolved past incident isn't useful;
 a resolved one with a known fix is the whole point.
 
 ## Where the card shows up

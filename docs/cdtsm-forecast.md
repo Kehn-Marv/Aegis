@@ -1,4 +1,4 @@
-# CDTSM forecast loop — closing the AI feedback cycle
+﻿# CDTSM forecast loop  -  closing the AI feedback cycle
 
 > How Aegis uses the **Cisco Deep Time Series Model** (Splunk-Hosted)
 > to predict its own future, then acts on that prediction.
@@ -15,7 +15,7 @@ before it does. The two metrics we forecast are:
 | `queue_depth` | When the SPSC ring fills, the gateway starts dropping anomalies (not just noise) | AegisOps proactively raises a noisy signature's dedup window before saturation hits |
 | `dedup_savings_pct` | A sustained drop is the earliest leading indicator that an app deploy is generating new signatures the embedding model hasn't clustered yet | AegisOps replays raw events through the classifier to re-seed the suppression model |
 
-This is a **closed-loop AI system** — the LLM (gpt-oss:20b via the
+This is a **closed-loop AI system**  -  the LLM (gpt-oss:20b via the
 AITK `\| ai` SPL command) makes the *policy* decision after reading a
 *forecast* produced by another Splunk-Hosted AI model (CDTSM). No
 human is in the loop except as auditor.
@@ -37,11 +37,11 @@ index=aegis sourcetype=aegis:selfmetric
 
 That returns a result row per timestamp with:
 
-* `queue_depth` — observed values (from `show_input=true`)
-* `predicted(queue_depth)` — CDTSM's point forecast for each of the
+* `queue_depth`  -  observed values (from `show_input=true`)
+* `predicted(queue_depth)`  -  CDTSM's point forecast for each of the
   next 15 minutes
 * `lower90(predicted(queue_depth))` /
-  `upper90(predicted(queue_depth))` — 90% confidence band
+  `upper90(predicted(queue_depth))`  -  90% confidence band
 
 The Dashboard Studio line viz renders all of them on one plot.
 
@@ -78,18 +78,18 @@ human saw a problem.
 
 CDTSM is the right fit for Aegis because it's:
 
-* A **foundation model** — no `| fit` step needed, the dashboard panel
+* A **foundation model**  -  no `| fit` step needed, the dashboard panel
   uses it inference-only with `| apply CDTSM`.
-* **Splunk-Hosted** — runs inside the Splunk AI Toolkit runtime, no
+* **Splunk-Hosted**  -  runs inside the Splunk AI Toolkit runtime, no
   external service to provision.
 * Designed for **multivariate** forecasting (we exploit this by
   potentially adding a third forecast on `events_in` to predict ingest
   spikes alongside the queue and savings forecasts).
-* Confidence-aware — the `conf_interval` is the signal AegisOps uses to
+* Confidence-aware  -  the `conf_interval` is the signal AegisOps uses to
   decide whether to act now (tight band, high confidence) or wait one
   more cycle (wide band, low confidence).
 
 The 5.7+ syntax in this dashboard matches AITK's documented surface;
 on earlier AITK versions you would use the DSDL/MLTK path
-(`| fit MLTKContainer algo=ctsm_forecast …`) — see the *DSDL 5.2.3*
+(`| fit MLTKContainer algo=ctsm_forecast …`)  -  see the *DSDL 5.2.3*
 fallback notes in [`splunk-blocker.md`](splunk-blocker.md).

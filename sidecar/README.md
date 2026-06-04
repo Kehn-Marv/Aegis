@@ -1,9 +1,9 @@
-# Aegis Python AI sidecar
+﻿# Aegis Python AI sidecar
 
 Optional FastAPI service the Rust gateway calls for higher-resolution
 log analysis than structural hashing can provide. The gateway runs fine
-without it — classification falls back to a keyword heuristic and the
-sidecar's only job goes away — but turning it on unlocks the AI
+without it  -  classification falls back to a keyword heuristic and the
+sidecar's only job goes away  -  but turning it on unlocks the AI
 classifier verdict on every collapsed event.
 
 ## Endpoints
@@ -21,20 +21,20 @@ classifier verdict on every collapsed event.
 
 `/classify` tries strategies in order; each falls back to the next:
 
-1. **Splunk Hosted Model (`| ai`)** — preferred when `AEGIS_SPLUNK_URL`
+1. **Splunk Hosted Model (`| ai`)**  -  preferred when `AEGIS_SPLUNK_URL`
    and `AEGIS_SPLUNK_TOKEN` are set. Runs classification inside Splunk's
    search pipeline via the AI Toolkit `| ai` command. Hibernated when
-   no Cloud / SLIM access — code path tested and reactivates on env-var
+   no Cloud / SLIM access  -  code path tested and reactivates on env-var
    change.
-2. **OpenAI-compatible endpoint (e.g. local Ollama)** — when
+2. **OpenAI-compatible endpoint (e.g. local Ollama)**  -  when
    `AEGIS_HOSTED_MODEL_URL` is set. Point it at
    `http://127.0.0.1:11434/v1/chat/completions` and you get genuine
    LLM classification at the edge with zero Splunk dependencies.
-3. **Embedding-distance** — cosine similarity between the line's
+3. **Embedding-distance**  -  cosine similarity between the line's
    sentence-transformer embedding and centroids built from canonical
    anomaly/routine seed phrases. Default day-to-day path: local,
    private, fast.
-4. **Keyword heuristic** — final fallback so the API never returns
+4. **Keyword heuristic**  -  final fallback so the API never returns
    `unknown` because nothing answered.
 
 The response includes the `strategy` that actually produced the label

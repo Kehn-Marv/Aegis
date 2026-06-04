@@ -1,4 +1,4 @@
-﻿# Aegis Workload  -  self-driving telemetry microservice
+# Aegis Workload  -  self-driving telemetry microservice
 
 This is the app that *produces* the telemetry Aegis protects. It simulates a
 small e-commerce service fleet (`api-gateway`, `auth`, `checkout`,
@@ -20,6 +20,20 @@ patterns by hand.
 
 ## Run it
 
+**Easiest way:** use Docker from the repo root. The workload runs
+automatically alongside the gateway and UI:
+
+```powershell
+docker compose up --build
+# Workload control room → http://localhost:8080
+# Aegis control panel   → http://localhost:7321
+```
+
+The workload connects to the gateway, generates traffic, and injects
+incidents on its own. No flags, no manual traffic commands.
+
+**From source (for development):**
+
 ```powershell
 cd microservice
 py -m venv .venv
@@ -28,8 +42,7 @@ pip install -e .
 python -m workload
 ```
 
-Open **http://localhost:8080** for the live control room. That's the whole
-setup  -  no flags, no manual traffic commands.
+Open **http://localhost:8080** for the live control room.
 
 If the Aegis gateway is running (ingest on `tcp/5140`), the workload connects
 automatically and you'll see incidents light up the Aegis decision card. If the

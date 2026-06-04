@@ -1,4 +1,4 @@
-﻿# MCP integration  -  Aegis on **both sides** of the protocol
+# MCP integration  -  Aegis on **both sides** of the protocol
 
 Aegis is intentionally bidirectional with respect to the Model Context
 Protocol:
@@ -41,10 +41,15 @@ session and is only useful for smoke-testing.
 
 ## HTTP transport (recommended)
 
-Start the daemon normally (the HTTP MCP server binds automatically at the
-address in `[mcp]` of `configs/aegis.toml`, default `127.0.0.1:7321`):
+Start the daemon. The MCP server binds automatically at the address in
+`[mcp]` of the config (default `127.0.0.1:7321`):
 
 ```powershell
+# Docker (easiest):
+docker compose up --build
+# MCP endpoint → http://localhost:7321/mcp
+
+# Or from source:
 cargo run --bin aegis-daemon
 # Aegis logs:  MCP HTTP listening at 127.0.0.1:7321/mcp
 ```

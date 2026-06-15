@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="aegis_banner.png" alt="Aegis Banner" width="100%" />
+</p>
+
 # Aegis
 
 > **On-call shouldn't mean on-edge.** Aegis sits between your services

@@ -8,7 +8,10 @@
 #   - Observe:    live gateway REST status only (SPL skipped)
 #   - Audit:      dry log to stdout (HEC skipped)
 #
-# THREE LIVE LLM TRANSPORTS are supported, picked by [llm].transport:
+# THREE LLM TRANSPORTS are supported, picked by [llm].transport.
+# Default "ollama" is what we ran for the hackathon demo; the two
+# Splunk `| ai` shapes are implemented but were not exercised on our
+# trial — see docs/splunk-blocker.md.
 #
 #   * "ollama"      — raw Ollama HTTP (default). Edge-first, no Splunk.
 #                     See docs/splunk-blocker.md.

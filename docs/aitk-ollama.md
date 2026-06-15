@@ -1,6 +1,9 @@
 ﻿# AITK + Ollama  -  bringing `| ai` SPL to a Developer-License Splunk
 
-> The third live LLM transport for Aegis.
+> The third LLM transport for Aegis — **implemented in code, opt-in via
+> config.** Our hackathon demo ran direct Ollama instead; see
+> [`splunk-blocker.md`](splunk-blocker.md) for why and what we attempted
+> in AITK Connection Management.
 
 ## Why this exists
 

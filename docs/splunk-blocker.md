@@ -1,4 +1,4 @@
-﻿# Splunk Hosted Models  -  provisioning blocker and the three live transports
+﻿# Splunk Hosted Models  -  provisioning blocker and the three LLM transports
 
 > Honest writeup of an infrastructure wall hit during the Splunk
 > Agentic Ops Hackathon 2026 and the **two** architectural pivots that
@@ -11,7 +11,8 @@ AI Toolkit `| ai` SPL command, SLIM-backed). The 14-day Splunk Cloud
 trial does **not** provision SLIM, so direct Hosted-Models calls
 return HTTP 500.
 
-We solved this **twice**, giving us three live LLM transports:
+We solved this **twice** in code, giving us three LLM transports (one
+default, two opt-in):
 
 | Transport | Where the model runs | Splunk surface? | Trial-safe? | Default? |
 |---|---|---|---|---|
@@ -20,10 +21,30 @@ We solved this **twice**, giving us three live LLM transports:
 | **`splunk_ai`** | Splunk-Hosted Models (SLIM) `gpt-oss-20b` / `Foundation-Sec-1.1-8B` | ✅ SPL `\| ai` command | ❌ Gated on trial | No (provisioned envs only) |
 
 The whole transport surface is one config flag (`[llm].transport =
-"ollama" | "aitk_ollama" | "splunk_ai"`). All three exercise the same
-`SplunkAITransport` and `OllamaTransport` code paths so the demo is
-end-to-end functional today on a Developer License with zero waiting on
-Splunk sales.
+"ollama" | "aitk_ollama" | "splunk_ai"`). All three share the same
+`SplunkAITransport` and `OllamaTransport` implementations so a
+provisioned Splunk environment can adopt any path without code changes.
+
+## What we actually ran vs what we built
+
+Honest split for reviewers — the project is end-to-end real; only the
+**Splunk AI routing layer** differed from the original plan.
+
+| Piece | Built in repo? | Ran in our hackathon env? | Notes |
+|---|---|---|---|
+| Gateway → HEC (8 sourcetypes) | ✅ | ✅ | Primary Splunk integration |
+| AegisOps agent + Ollama (`transport = "ollama"`) | ✅ | ✅ | **Default demo path** |
+| Aegis AI app (`splunklib.ai` → Ollama HTTP) | ✅ | ✅ | Direct Ollama, not `\| ai` |
+| Splunk MCP client (agent observability) | ✅ | ✅ | When Splunk creds configured |
+| AITK `\| ai` via Ollama connection (`aitk_ollama`) | ✅ | ❌ | Code + docs; needs AITK **Ollama** connection (different from the SLIM connection we tried) |
+| Splunk Hosted Models / SLIM (`splunk_ai`) | ✅ | ❌ | Blocked on 14-day Cloud trial |
+| CDTSM forecast panels | ✅ | ❌ | Cloud-only; panels show expected 404 locally |
+
+We did **not** mock the LLM or the Splunk telemetry pipeline. We ran a
+real local model and shipped real audit events. What we could not turn on
+was Splunk's `\| ai` command — first because SLIM provisioning failed,
+then because we fell back to direct Ollama rather than completing a
+separate AITK **Ollama-type** connection setup.
 
 ## What we attempted (direct SLIM path)
 
@@ -52,9 +73,10 @@ abuse of the SLIM API. Provisioning Hosted Models on these trials
 requires a manual flip by a Splunk sales engineer or hackathon
 organiser.
 
-## Plan A′  -  AITK Connection Management + local Ollama (LIVE)
+## Plan A′  -  AITK Connection Management + local Ollama (implemented, opt-in)
 
-This is the path we should have started with. AITK 5.6+ supports
+This is the path we should have started with — and the one we **did not
+complete on our trial box** after the SLIM connection failed. AITK 5.6+ supports
 **user-defined LLM connections**, and Ollama is one of the supported
 provider types out of the box (per the Lantern doc *Leveraging
 generative AI capability in security operations with the AITK*,
@@ -93,13 +115,14 @@ INFO SplunkAITransport initialised: provider=ollama_local model=gpt-oss:20b
 This is a genuine integration with the AI Toolkit and the SPL `| ai`
 surface.
 
-## Plan B  -  raw Ollama (LIVE, default)
+## Plan B  -  raw Ollama (default — what we ran)
 
-The original Plan B from the first iteration of this doc. Now reframed
-as the **edge-first default**: when the agent is deployed *at* an edge
-site (where the whole point is to keep traffic off the WAN), routing
-LLM calls back to a centralised Splunk Cloud is the opposite of what we
-want. So:
+The original Plan B from the first iteration of this doc. This is what
+we **actually used** for the hackathon demo after AITK Connection
+Management could not provision SLIM. It is also the **edge-first
+default**: when the agent is deployed *at* an edge site (where the whole
+point is to keep traffic off the WAN), routing LLM calls back to a
+centralised Splunk Cloud is the opposite of what we want. So:
 
 * **`transport = "ollama"`** stays the default in
   `agent/configs/aegis-ops.example.toml`.
@@ -172,16 +195,26 @@ What doesn't:
 
 ## What this means for the submission
 
-Aegis ships **a working, tested integration with the `| ai` SPL
-transport** (`SplunkAITransport`, `sidecar/splunk_ai.py`) **and**
-exercises that transport *live* via the `aitk_ollama` shape (AITK
-Connection Management → Ollama → `gpt-oss:20b`). The pure
-SLIM-backed path is hibernated only because the provisioned
-environment to run it against does not exist on a 14-day trial  -  but
-the SPL `| ai` surface, the AITK Connection Management UI, and the
-`gpt-oss:20b` model identifier are **all exercised in the demo**.
+Aegis is a **real** end-to-end system — gateway, agent, Splunk app,
+HEC audit trail, and a **live local LLM** — not a mocked demo.
 
-That is materially different from "we never integrated Hosted
-Models". We integrated them, tested them against a mocked SLIM SPL
-endpoint, and we route through the same AITK `| ai` surface every
-day using a local Ollama instance hosting the same model identifier.
+What we can claim honestly:
+
+* **Ran live:** Ollama-backed reasoning (agent + Splunk app), full HEC
+  pipeline, MCP observability, Dashboard Studio over indexed Aegis data.
+* **Implemented, one config line away:** the `| ai` SPL transport
+  (`SplunkAITransport`, `sidecar/splunk_ai.py`) for both
+  `aitk_ollama` (AITK Ollama connection) and `splunk_ai` (SLIM Hosted
+  Models). Same prompt, same `Decision` schema, same audit shape.
+* **Blocked on our trial environment:** SLIM provisioning (HTTP 500 /
+  "No providers found" in AITK Connection Management) and therefore
+  `\| ai` searches with no default provider. We did **not** subsequently
+  stand up an AITK **Ollama-type** connection on that box.
+* **Tested without live SLIM:** `SplunkAITransport` plumbing against a
+  mocked `\| ai` oneshot response during development.
+
+That is materially different from "we never integrated Hosted Models"
+*or* "we faked the AI layer". We integrated the Splunk AI surfaces in
+code, ran genuine LLM reasoning via direct Ollama, and kept the same
+`gpt-oss:20b` model identifier so a provisioned SLIM or AITK Ollama
+connection is a config flip, not a rewrite.

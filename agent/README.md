@@ -22,11 +22,14 @@ for each gateway in config:
 
 ## LLM transports
 
-| Transport       | Status     | Requires                                                              |
-|-----------------|------------|------------------------------------------------------------------------|
-| `ollama`        | **Default**| Local Ollama running `gpt-oss:20b` (~16 GB RAM) or a smaller fallback  |
-| `aitk_ollama`   | Live       | Splunk Enterprise + AI Toolkit + AITK Ollama LLM connection           |
-| `splunk_ai`     | One-line   | Splunk Cloud SLIM access (gated on the 14-day trial)                  |
+| Transport       | Status                         | Requires                                                              |
+|-----------------|--------------------------------|------------------------------------------------------------------------|
+| `ollama`        | **Default — what we ran**      | Local Ollama running `gpt-oss:20b` (~16 GB RAM) or a smaller fallback  |
+| `aitk_ollama`   | Implemented (opt-in)           | Splunk Enterprise + AI Toolkit + AITK **Ollama-type** LLM connection  |
+| `splunk_ai`     | Implemented (SLIM-gated)       | Splunk Cloud SLIM access (blocked on the 14-day trial)                |
+
+See [`docs/splunk-blocker.md`](../docs/splunk-blocker.md) for what we
+actually ran vs what we built.
 
 All three produce the same JSON `Decision`. Switching is one line in
 `configs/aegis-ops.toml`.

@@ -1,0 +1,59 @@
+# Recording config — tuned for the 3-minute demo video.
+#
+# Timings are deliberately tight so transitions happen while the voiceover
+# is still talking. Use this config ONLY for recording, not for live demos
+# where you want more breathing room.
+#
+# Usage:
+#   cargo run --release --bin aegis-daemon -- --config configs\aegis.recording.toml
+
+[hec]
+endpoint     = "https://localhost:8088/services/collector/event"
+token        = "PUT-YOUR-HEC-TOKEN-HERE"
+index        = "aegis"
+host         = "aegis-edge-demo"
+verify_tls   = false
+
+[ingest]
+tcp_listen = "127.0.0.1:5140"
+
+[dedup]
+window_secs         = 3
+max_open_signatures = 4096
+
+[mcp]
+http_listen = "127.0.0.1:7321"
+
+[sidecar]
+enabled = false
+
+# The cascade pattern takes ~16s. A 20s window catches it with headroom.
+# 15s cooldown means the second cascade can fire 15s after the first chain
+# emits — tight enough that you're still talking when the new card appears.
+[causal]
+window_secs   = 20
+min_services  = 3
+cooldown_secs = 15
+
+[memory]
+path           = "data/aegis-incidents.recording.sqlite"
+top_matches    = 3
+min_similarity = 0.25
+
+# Card flips to green after the last chain activity.
+# We've increased this to 60s so you have plenty of time to click "Show me more",
+# explain the memory, and click "I'm on it" before the card vanishes!
+[decision]
+idle_to_green_secs = 60
+
+[silence]
+silence_secs = 60
+sweep_secs   = 5
+enabled      = true
+
+# Service descriptions power the "why this matters" box on the decision
+# card. Keep these descriptive — they show on camera.
+[services]
+"payment-api"  = "Handles all transaction processing. Revenue-critical."
+"checkout"     = "Customer-facing checkout flow."
+"orders"       = "Order fulfilment pipeline."

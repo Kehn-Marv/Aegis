@@ -34,8 +34,9 @@ agent/configs/aegis-ops.toml
 *.tgz
 *.spl
 
-# Archives (not part of the repo)
+# Archives / large media (not part of the repo)
 *.zip
+*.gif
 
 # IDE / OS
 .vscode/

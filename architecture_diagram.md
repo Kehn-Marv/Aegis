@@ -24,7 +24,7 @@ flowchart LR
 
     SIDE["AI sidecar<br/>MiniLM embeddings"]
     AGENT["AegisOps agent<br/>observe → reason → act"]
-    LLM["LLM brain<br/>Ollama · AI Toolkit | ai · Splunk Hosted Models"]
+    LLM_OLLAMA["Ollama<br/>(default · what we ran)"]
     UI["React control panel<br/>+ external AI agents via MCP"]
     COL["OTel Collector"]
 
@@ -34,6 +34,7 @@ flowchart LR
         DASH["Dashboard Studio + CDTSM forecast"]
         SAPP["Aegis AI app<br/>alert action + | aegisreason (splunklib.ai)"]
         SMCP["Splunk MCP Server"]
+        AITK["AITK | ai<br/>(opt-in · not exercised on trial)"]
     end
 
     APP --> OTEL
@@ -44,12 +45,14 @@ flowchart LR
     DEC <--> MEM
     DEC -->|processed events| HEC
     HEC --> IDX --> DASH
-    IDX --> SAPP --> LLM
+    IDX --> SAPP --> LLM_OLLAMA
 
     API <--> UI
     AGENT -->|REST /api/decision| API
     AGENT -->|tools/call| SMCP
-    AGENT --> LLM
+    AGENT --> LLM_OLLAMA
+    AGENT -.->|Splunk REST oneshot| AITK
+    AITK -.-> LLM_OLLAMA
     AGENT -->|audit| HEC
 
     classDef wl fill:#eaf3ff,stroke:#0071e3,color:#0b2a4a;
@@ -58,8 +61,8 @@ flowchart LR
     classDef spl fill:#f1edff,stroke:#5e5ce6,color:#2a235a;
     class APP,OTEL wl;
     class ING,GATE,CAUSAL,MEM,DEC,API edge;
-    class SIDE,AGENT,LLM,UI,COL ai;
-    class HEC,IDX,DASH,SAPP,SMCP spl;
+    class SIDE,AGENT,LLM_OLLAMA,UI,COL ai;
+    class HEC,IDX,DASH,SAPP,SMCP,AITK spl;
 ```
 
 ## 1. How the application interacts with Splunk
@@ -85,8 +88,10 @@ flowchart LR
 * **AegisOps agent** runs `observe → reason → act`: it reads the gateway's
   decision card, grounds an LLM prompt in it, and may call low-risk Aegis
   tools  -  auditing every decision to Splunk.
-* **One LLM flag, three transports:** local **Ollama**, Splunk **AI Toolkit
-  `| ai`**, or **Splunk Hosted Models**.
+* **One LLM flag, three transports:** local **Ollama** (default — what we
+  ran), Splunk **AI Toolkit `| ai`** (`aitk_ollama`, implemented but not
+  exercised on our trial), or **Splunk Hosted Models** (`splunk_ai`, SLIM-gated).
+  Solid arrows in the diagram = default path; dashed = opt-in / blocked on trial.
 * **Aegis AI app** (Splunkbase-shaped) adds a Custom Alert Action and the
   `| aegisreason` SPL command, both powered by `splunklib.ai.Agent`.
 
@@ -98,7 +103,8 @@ workload ──raw logs (TCP 5140)──▶ Aegis gateway ──processed (HEC)�
    └── OTLP ▶ OTel Collector ▶ HEC ────┘  │ REST + MCP (7321)          ▼
                                           ├──▶ React control panel   Dashboards
                                           ├──▶ external AI agents (MCP)
-                                          └──▶ AegisOps agent ──▶ LLM ──▶ HEC audit
+                                          └──▶ AegisOps agent ──▶ Ollama (default) ──▶ HEC audit
+                                              (optional: ──▶ AITK | ai via Splunk MCP)
 ```
 
 The control plane shares one in-memory `Arc<Control>`: the UI's REST poll, the

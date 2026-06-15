@@ -25,16 +25,30 @@
 
 Splunk Agentic Ops Hackathon 2026 · Observability track.
 
+<p align="center">
+  <a href="https://youtu.be/9QAH6bdk_Mo">
+    <img src="https://img.youtube.com/vi/9QAH6bdk_Mo/maxresdefault.jpg" alt="Aegis 3-minute demo" width="720" />
+    <br />
+    <strong>▶ Watch the 3-minute demo</strong>
+  </a>
+</p>
+
 ---
 
 > [!WARNING]
 > **Splunk Cloud access.** Some Splunk Cloud features (SLIM-backed Hosted
 > Models, CDTSM forecasting) require provisioning that was not available on
 > the 14-day trial. We reached out to Splunk support and the hackathon
-> channel but did not get access in time. The integrations are fully built
-> and wired; they activate the moment the environment is provisioned. We
-> routed through AITK + local Ollama to keep the `| ai` pipeline live.
-> Details in [`docs/splunk-blocker.md`](docs/splunk-blocker.md).
+> channel but did not get access in time.
+>
+> **What we actually ran:** local **Ollama over HTTP** (agent default +
+> Splunk app via `splunklib.ai`) with full HEC telemetry and agent audit.
+> **What we built but did not exercise on our trial:** the AI Toolkit
+> `| ai` path (`aitk_ollama` / `splunk_ai` transports) — SLIM-hosted
+> connections failed in AITK Connection Management; we did not complete an
+> AITK **Ollama** connection setup in that environment. Those code paths
+> are implemented and switch on with one config line when the Splunk side
+> is wired. See [`docs/splunk-blocker.md`](docs/splunk-blocker.md).
 
 ---
 
